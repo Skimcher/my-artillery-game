@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Artillery 2.5D</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-container">
+        <div id="turn-indicator">Ожидание игроков...</div>
+        <div id="timer">9</div>
+        <div id="controls" class="hidden">
+            <button id="btn-fire" class="active">FIRE (Выстрел)</button>
+            <button id="btn-move">MOVE (Ход)</button>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
