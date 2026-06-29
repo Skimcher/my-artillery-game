@@ -1,0 +1,49 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+    background-color: #1a1a1a;
+}
+
+#canvas-container {
+    width: 100vw;
+    height: 100vh;
+}
+
+#ui-container {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    color: white;
+    z-index: 10;
+    pointer-events: none; /* Чтобы клики проходили сквозь UI на 3D сцену */
+}
+
+#timer {
+    font-size: 48px;
+    font-weight: bold;
+    color: #ff4757;
+    margin: 10px 0;
+}
+
+#controls {
+    pointer-events: auto; /* Включаем клики для кнопок */
+    display: flex;
+    gap: 20px;
+}
+
+button {
+    padding: 15px 30px;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+#btn-fire { background-color: #ff4757; color: white; }
+#btn-move { background-color: #2ed573; color: white; }
+.hidden { display: none !important; }
