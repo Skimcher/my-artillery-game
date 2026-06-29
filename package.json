@@ -1,0 +1,13 @@
+{
+  "name": "artillery-2.5d-game",
+  "version": "1.0.0",
+  "description": "2.5D Multiplayer Artillery Game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
