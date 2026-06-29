@@ -47,3 +47,4 @@ button {
 #btn-fire { background-color: #ff4757; color: white; }
 #btn-move { background-color: #2ed573; color: white; }
 .hidden { display: none !important; }
+.active { background-color: #ffa500 !important; border: 2px solid white; }
