@@ -232,3 +232,11 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
+socket.on('gameOver', (data) => {
+    if (data.winner === myId) {
+        alert("ПОБЕДА! Вы уничтожили всю артиллерию противника!");
+    } else {
+        alert("ПОРАЖЕНИЕ! Все ваши пушки уничтожены.");
+    }
+    window.location.reload(); // Перезагружаем страницу для поиска новой игры
+});
