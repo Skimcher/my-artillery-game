@@ -13,8 +13,6 @@ const burningUnitsPositions = [];
 // --- НАСТРОЙКА THREE.JS ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-
-// Меняем фон на мягкий кремовый цвет
 scene.background = new THREE.Color(0xF5F2EB);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -25,13 +23,12 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 container.appendChild(renderer.domElement);
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.75); // Сделали свет чуть ярче для светлого фона
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.75); 
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-// Сетки-разметки поверх полей делаем потемнее (коричнево-серые), чтобы они не сливались с кремовым
 const gridHelperLeft = new THREE.GridHelper(8, 8, 0x1e90ff, 0x888888);
 gridHelperLeft.position.set(-5, 0.06, 0);
 scene.add(gridHelperLeft);
@@ -42,24 +39,19 @@ scene.add(gridHelperRight);
 
 const clickableCells = [];
 
-// --- ГЕНЕРАЦИЯ ПРОЦЕДУРНОЙ ТЕКСТУРЫ ЗЕМЛИ ---
 function createDirtTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
 
-    // Базовый коричневый цвет земли
     ctx.fillStyle = '#5c4033';
     ctx.fillRect(0, 0, 128, 128);
 
-    // Добавляем текстурный шум (грязь/песок)
     for (let i = 0; i < 800; i++) {
         const x = Math.random() * 128;
         const y = Math.random() * 128;
         const size = 1 + Math.random() * 2;
-        
-        // Случайные темные и светлые крупицы почвы
         ctx.fillStyle = Math.random() > 0.5 ? '#4a3329' : '#6e4e3f';
         ctx.fillRect(x, y, size, size);
     }
@@ -77,14 +69,11 @@ function createGridPlatform(offsetX, isEnemy) {
     for (let x = 0; x < 8; x++) {
         for (let z = 0; z < 8; z++) {
             const geometry = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
-            
-            // Накладываем текстуру земли и делаем вражеское поле чуть темнее для отличия
             const material = new THREE.MeshStandardMaterial({ 
                 map: dirtTexture,
-                color: isEnemy ? 0xcccccc : 0xffffff, // Вражеское поле слегка притемнено
+                color: isEnemy ? 0xcccccc : 0xffffff, 
                 roughness: 0.9 
             });
-            
             const cell = new THREE.Mesh(geometry, material);
             cell.position.set(x - 3.5 + offsetX, 0, z - 3.5);
             
@@ -95,8 +84,8 @@ function createGridPlatform(offsetX, isEnemy) {
     }
 }
 
-createGridPlatform(-5, false); // Наше поле земли
-createGridPlatform(5, true);   // Поле земли соперника
+createGridPlatform(-5, false); 
+createGridPlatform(5, true);   
 
 function createVisualUnit(id, x, z, color, isDestroyed) {
     const group = new THREE.Group();
@@ -129,7 +118,7 @@ function createVisualUnit(id, x, z, color, isDestroyed) {
 }
 
 function createSplash(worldX, worldZ, type) {
-    const color = (type === 'hit') ? 0xffa500 : 0x5c4033; // Промах теперь выбивает коричневые ошметки земли
+    const color = (type === 'hit') ? 0xffa500 : 0x5c4033; 
     const particleCount = 15;
 
     for (let i = 0; i < particleCount; i++) {
@@ -229,9 +218,11 @@ window.addEventListener('click', (event) => {
             
             if (!targetUnits || targetUnits.length === 0) return;
 
+            // Находим все живые пушки этой команды
             const aliveUnits = targetUnits.filter(u => !u.destroyed);
             if (aliveUnits.length === 0) return;
 
+            // Вычисляем индекс ближайшей живой пушки по её текущим случайным координатам
             let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
             if (aliveUnits.length > 1) {
                 const dist0 = Math.abs(aliveUnits[0].x - gridX) + Math.abs(aliveUnits[0].y - gridY);
