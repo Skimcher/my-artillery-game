@@ -38,8 +38,9 @@ io.on('connection', (socket) => {
                 roomId: roomId
             };
 
-            player1.emit('gameStart', { role: 'p1', state: rooms[roomId] });
-            player2.emit('gameStart', { role: 'p2', state: rooms[roomId] });
+            // При старте передаем роли
+            player1.emit('gameStart', { role: 'p1', state: getMaskedState(rooms[roomId], 'p1') });
+            player2.emit('gameStart', { role: 'p2', state: getMaskedState(rooms[roomId], 'p2') });
 
             startGameTimer(roomId);
         }
@@ -58,7 +59,7 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return; 
 
-        // Приоритет форсированной роли от клиента (для точного теста)
+        // Определяем игрока (для соло-тестов используем forcedRole)
         const currentPlayer = data.forcedRole ? room.players[data.forcedRole] : (room.players.p1.id === socket.id ? room.players.p1 : room.players.p2);
         const enemyPlayer = currentPlayer.role === 'p1' ? room.players.p2 : room.players.p1;
 
@@ -86,7 +87,6 @@ io.on('connection', (socket) => {
                 const distanceX = Math.abs(unit.x - data.x);
                 const distanceY = Math.abs(unit.y - data.y);
 
-                // Ограничение хода: максимум на 3 клетки во все стороны
                 if (distanceX <= 3 && distanceY <= 3) {
                     const cellBusy = currentPlayer.units.some((u, idx) => idx !== data.unitIndex && u.x === data.x && u.y === data.y);
                     
@@ -105,7 +105,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`Игрок отключился: ${socket.id}`);
         if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
             waitingPlayer = null;
         }
@@ -131,6 +130,28 @@ function startGameTimer(roomId) {
     }, 1000);
 }
 
+// Функция отправки обновлений с фильтрацией тумана войны для каждого игрока индивидуально
+function broadcastState(room) {
+    const p1Socket = io.sockets.sockets.get(room.players.p1.id);
+    const p2Socket = io.sockets.sockets.get(room.players.p2.id);
+
+    if (p1Socket) p1Socket.emit('gameStateUpdate', getMaskedState(room, 'p1'));
+    if (p2Socket) p2Socket.emit('gameStateUpdate', getMaskedState(room, 'p2'));
+}
+
+// Прячем чужие пушки в зависимости от роли получателя
+function getMaskedState(room, targetRole) {
+    const masked = {
+        turn: room.turn,
+        timer: room.timer,
+        players: {
+            p1: { role: 'p1', units: targetRole === 'p1' ? [...room.players.p1.units] : [] },
+            p2: { role: 'p2', units: targetRole === 'p2' ? [...room.players.p2.units] : [] }
+        }
+    };
+    return masked;
+}
+
 function switchTurn(room) {
     room.timer = 9;
     const p1Id = room.players.p1.id;
@@ -138,7 +159,7 @@ function switchTurn(room) {
     
     room.turn = room.turn === p1Id ? p2Id : p1Id;
 
-    io.to(room.roomId).emit('gameStateUpdate', room);
+    broadcastState(room);
     io.to(room.roomId).emit('turnChanged', { turn: room.turn, timer: room.timer });
 }
 
@@ -147,10 +168,5 @@ server.listen(PORT, () => {
     console.log(`Сервер запущен на порту ${PORT}`);
 });
 
-// Глобальный перехватчик сбоев бэкенда для Render
-process.on('uncaughtException', (err) => {
-    console.error('Критическая ошибка бэкенда:', err);
-});
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Необработанный отказ в Promise:', reason);
-});
+process.on('uncaughtException', (err) => console.error(err));
+process.on('unhandledRejection', (reason) => console.error(reason));
