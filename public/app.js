@@ -7,6 +7,7 @@ let gameState = null;
 let currentMode = 'fire';   
 
 const visualUnits = {};     
+const particles = []; // Массив для анимации всплесков
 
 // --- НАСТРОЙКА THREE.JS ---
 const container = document.getElementById('canvas-container');
@@ -56,8 +57,8 @@ function createGridPlatform(offsetX, isEnemy) {
     }
 }
 
-createGridPlatform(-5, false); // Синее поле (слева)
-createGridPlatform(5, true);   // Красное поле (справа)
+createGridPlatform(-5, false); 
+createGridPlatform(5, true);   
 
 function createVisualUnit(id, x, z, color) {
     const group = new THREE.Group();
@@ -83,6 +84,32 @@ function createVisualUnit(id, x, z, color) {
     group.position.set(x, 0, z);
     scene.add(group);
     visualUnits[id] = group;
+}
+
+// --- ФУНКЦИЯ СОЗДАНИЯ 3D ВСПЛЕСКА (ЭФФЕКТЫ ЧАСТИЦ) ---
+function createSplash(worldX, worldZ, type) {
+    // Попадание: Оранжевый (0xffa500), Промах: Коричневый (0x8b4513)
+    const color = (type === 'hit') ? 0xffa500 : 0x8b4513;
+    const particleCount = 15;
+
+    for (let i = 0; i < particleCount; i++) {
+        const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const mat = new THREE.MeshBasicMaterial({ color: color });
+        const mesh = new THREE.Mesh(geo, mat);
+
+        // Позиционируем в месте взрыва
+        mesh.position.set(worldX + (Math.random() - 0.5) * 0.3, 0.2, worldZ + (Math.random() - 0.5) * 0.3);
+        scene.add(mesh);
+
+        // Задаем случайные векторы скоростей для разлета
+        particles.push({
+            mesh: mesh,
+            vX: (Math.random() - 0.5) * 0.1,
+            vY: 0.1 + Math.random() * 0.1, // Вверх
+            vZ: (Math.random() - 0.5) * 0.1,
+            life: 30 // Время жизни в кадрах
+        });
+    }
 }
 
 // --- UI И КНОПКИ ---
@@ -127,8 +154,6 @@ window.addEventListener('click', (event) => {
 
         if (currentMode === 'fire') {
             if (!isEnemy) return;
-            
-            // Соло-тест: если ход не наш, стреляем за противоположную роль
             const firingRole = (gameState.turn === myId) ? myRole : (myRole === 'p1' ? 'p2' : 'p1');
             
             socket.emit('playerAction', { 
@@ -142,11 +167,7 @@ window.addEventListener('click', (event) => {
             const targetRole = isEnemy ? 'p2' : 'p1';
             const targetUnits = gameState.players[targetRole].units;
             
-            // Если массив пуст (скрыт туманом войны), прерываем ход
-            if (!targetUnits || targetUnits.length === 0) {
-                console.log("Вы не можете двигать невидимые пушки!");
-                return;
-            }
+            if (!targetUnits || targetUnits.length === 0) return;
 
             let targetUnitIndex = 0;
             if (targetUnits.length > 1) {
@@ -194,6 +215,15 @@ socket.on('gameStateUpdate', (newState) => {
     renderUnits();
 });
 
+// СЛУШАЕМ РЕЗУЛЬТАТ ВЫСТРЕЛОВ И СОЗДАЕМ КРАСИВЫЕ ЭФФЕКТЫ
+socket.on('fireResult', (data) => {
+    const offset = data.targetRole === 'p2' ? 5 : -5;
+    const worldX = data.x - 3.5 + offset;
+    const worldZ = data.y - 3.5;
+
+    createSplash(worldX, worldZ, data.result);
+});
+
 socket.on('gameOver', (data) => {
     alert(data.winner === myId ? "ПОБЕДА! Все пушки врага уничтожены!" : "ПОРАЖЕНИЕ! Ваши пушки уничтожены.");
     window.location.reload();
@@ -210,7 +240,6 @@ function updateTurnUI() {
 }
 
 function renderUnits() {
-    // Удаляем старые модельки
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     
     const p1 = gameState.players.p1;
@@ -218,14 +247,12 @@ function renderUnits() {
     const p1Offset = -5;
     const p2Offset = 5;
 
-    // Отрисовка синих (если они видны клиенту)
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
             createVisualUnit(`p1_${index}`, unit.x - 3.5 + p1Offset, unit.y - 3.5, 0x1e90ff);
         });
     }
 
-    // Отрисовка красных (если они видны клиенту)
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
             createVisualUnit(`p2_${index}`, unit.x - 3.5 + p2Offset, unit.y - 3.5, 0xff4757);
@@ -233,7 +260,29 @@ function renderUnits() {
     }
 }
 
-function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+// --- ИГРОВОЙ ЦИКЛ С ОБНОВЛЕНИЕМ ЧАСТИЦ ---
+function animate() {
+    requestAnimationFrame(animate);
+
+    // Анимация и обновление физики всплесков
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.mesh.position.x += p.vX;
+        p.mesh.position.y += p.vY;
+        p.mesh.position.z += p.vZ;
+
+        p.vY -= 0.008; // Гравитация тянет частицы вниз
+        p.life--;
+
+        // Удаляем старые частицы со сцены
+        if (p.life <= 0) {
+            scene.remove(p.mesh);
+            particles.splice(i, 1);
+        }
+    }
+
+    renderer.render(scene, camera);
+}
 animate();
 
 window.addEventListener('resize', () => {
