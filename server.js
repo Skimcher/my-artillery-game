@@ -11,6 +11,20 @@ expressApp.use(express.static('public'));
 let rooms = {}; 
 let waitingPlayer = null; 
 
+// Функция для генерации уникальных случайных координат для двух пушек игрока
+function generateRandomUnits() {
+    const u1 = { x: Math.floor(Math.random() * 8), y: Math.floor(Math.random() * 8), destroyed: false };
+    let u2 = { x: Math.floor(Math.random() * 8), y: Math.floor(Math.random() * 8), destroyed: false };
+    
+    // Если координаты совпали, перегенерируем вторую пушку, пока они не станут уникальными
+    while (u1.x === u2.x && u1.y === u2.y) {
+        u2.x = Math.floor(Math.random() * 8);
+        u2.y = Math.floor(Math.random() * 8);
+    }
+    
+    return [u1, u2];
+}
+
 io.on('connection', (socket) => {
     console.log(`Игрок подключился: ${socket.id}`);
 
@@ -28,10 +42,11 @@ io.on('connection', (socket) => {
             socket.join(roomId);
             waitingPlayer = null; 
 
+            // Генерируем случайные начальные позиции для обеих команд
             rooms[roomId] = {
                 players: {
-                    p1: { id: player1.id, role: 'p1', units: [{x:1, y:1, destroyed: false}, {x:1, y:6, destroyed: false}] }, 
-                    p2: { id: player2.id, role: 'p2', units: [{x:6, y:1, destroyed: false}, {x:6, y:6, destroyed: false}] }  
+                    p1: { id: player1.id, role: 'p1', units: generateRandomUnits() }, 
+                    p2: { id: player2.id, role: 'p2', units: generateRandomUnits() }  
                 },
                 turn: player1.id, 
                 timer: 9,
@@ -64,18 +79,14 @@ io.on('connection', (socket) => {
         let actionSuccess = false;
 
         if (data.type === 'fire') {
-            // Ищем только среди ЖИВЫХ пушек врага
             const hitIndex = enemyPlayer.units.findIndex(u => !u.destroyed && u.x === data.x && u.y === data.y);
             
             if (hitIndex !== -1) {
                 console.log(`Попадание по координатам X:${data.x}, Y:${data.y}`);
-                
-                // Вместо удаления — помечаем уничтоженной
                 enemyPlayer.units[hitIndex].destroyed = true;
                 
                 io.to(roomId).emit('fireResult', { result: 'hit', x: data.x, y: data.y, targetRole: enemyPlayer.role });
 
-                // Проверяем, остались ли живые пушки
                 const aliveUnits = enemyPlayer.units.filter(u => !u.destroyed);
                 if (aliveUnits.length === 0) {
                     io.to(roomId).emit('gameOver', { winner: currentPlayer.id });
@@ -91,7 +102,6 @@ io.on('connection', (socket) => {
         } 
         else if (data.type === 'move') {
             const unit = currentPlayer.units[data.unitIndex];
-            // Уничтоженная пушка ходить не может!
             if (unit && !unit.destroyed) {
                 const distanceX = Math.abs(unit.x - data.x);
                 const distanceY = Math.abs(unit.y - data.y);
@@ -147,7 +157,6 @@ function broadcastState(room) {
     if (p2Socket) p2Socket.emit('gameStateUpdate', getMaskedState(room, 'p2'));
 }
 
-// Фильтрация тумана войны: отдаем свои пушки ВСЕГДА, а вражеские — ТОЛЬКО если они destroyed: true
 function getMaskedState(room, targetRole) {
     const p1Filtered = room.players.p1.units.filter(u => targetRole === 'p1' || u.destroyed);
     const p2Filtered = room.players.p2.units.filter(u => targetRole === 'p2' || u.destroyed);
