@@ -2,11 +2,12 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
-const app = express();
-const server = http.createServer(app);
+const app = report => express();
+const expressApp = express();
+const server = http.createServer(expressApp);
 const io = new Server(server);
 
-app.use(express.static('public'));
+expressApp.use(express.static('public'));
 
 let rooms = {}; 
 let waitingPlayer = null; 
@@ -38,7 +39,6 @@ io.on('connection', (socket) => {
                 roomId: roomId
             };
 
-            // При старте передаем роли
             player1.emit('gameStart', { role: 'p1', state: getMaskedState(rooms[roomId], 'p1') });
             player2.emit('gameStart', { role: 'p2', state: getMaskedState(rooms[roomId], 'p2') });
 
@@ -59,7 +59,6 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return; 
 
-        // Определяем игрока (для соло-тестов используем forcedRole)
         const currentPlayer = data.forcedRole ? room.players[data.forcedRole] : (room.players.p1.id === socket.id ? room.players.p1 : room.players.p2);
         const enemyPlayer = currentPlayer.role === 'p1' ? room.players.p2 : room.players.p1;
 
@@ -69,15 +68,22 @@ io.on('connection', (socket) => {
             const hitIndex = enemyPlayer.units.findIndex(u => u.x === data.x && u.y === data.y);
             
             if (hitIndex !== -1) {
-                console.log(`Попадание в поле ${enemyPlayer.role} по координатам X:${data.x}, Y:${data.y}`);
+                console.log(`Попадание по координатам X:${data.x}, Y:${data.y}`);
                 enemyPlayer.units.splice(hitIndex, 1);
                 
+                // Передаем всем в комнате результат выстрела (hit)
+                io.to(roomId).emit('fireResult', { result: 'hit', x: data.x, y: data.y, targetRole: enemyPlayer.role });
+
                 if (enemyPlayer.units.length === 0) {
                     io.to(roomId).emit('gameOver', { winner: currentPlayer.id });
                     clearInterval(room.interval);
                     delete rooms[roomId];
                     return;
                 }
+            } else {
+                console.log(`Промах по координатам X:${data.x}, Y:${data.y}`);
+                // Передаем всем в комнате результат выстрела (miss)
+                io.to(roomId).emit('fireResult', { result: 'miss', x: data.x, y: data.y, targetRole: enemyPlayer.role });
             }
             actionSuccess = true;
         } 
@@ -130,7 +136,6 @@ function startGameTimer(roomId) {
     }, 1000);
 }
 
-// Функция отправки обновлений с фильтрацией тумана войны для каждого игрока индивидуально
 function broadcastState(room) {
     const p1Socket = io.sockets.sockets.get(room.players.p1.id);
     const p2Socket = io.sockets.sockets.get(room.players.p2.id);
@@ -139,9 +144,8 @@ function broadcastState(room) {
     if (p2Socket) p2Socket.emit('gameStateUpdate', getMaskedState(room, 'p2'));
 }
 
-// Прячем чужие пушки в зависимости от роли получателя
 function getMaskedState(room, targetRole) {
-    const masked = {
+    return {
         turn: room.turn,
         timer: room.timer,
         players: {
@@ -149,7 +153,6 @@ function getMaskedState(room, targetRole) {
             p2: { role: 'p2', units: targetRole === 'p2' ? [...room.players.p2.units] : [] }
         }
     };
-    return masked;
 }
 
 function switchTurn(room) {
