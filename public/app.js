@@ -29,11 +29,12 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-const gridHelperLeft = new THREE.GridHelper(8, 8, 0x1e90ff, 0x888888);
+// УБРАЛИ ЦВЕТНЫЕ КРЕСТЫ: теперь обе сетки полностью нейтрального серого цвета
+const gridHelperLeft = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
 gridHelperLeft.position.set(-5, 0.06, 0);
 scene.add(gridHelperLeft);
 
-const gridHelperRight = new THREE.GridHelper(8, 8, 0xff4757, 0x888888);
+const gridHelperRight = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
 gridHelperRight.position.set(5, 0.06, 0);
 scene.add(gridHelperRight);
 
@@ -87,7 +88,8 @@ function createGridPlatform(offsetX, isEnemy) {
 createGridPlatform(-5, false); 
 createGridPlatform(5, true);   
 
-function createVisualUnit(id, x, z, color, isDestroyed) {
+// ДОРАБОТКА: Теперь передаем параметр owner ('p1' или 'p2') для правильного направления дула
+function createVisualUnit(id, x, z, color, isDestroyed, owner) {
     const group = new THREE.Group();
     
     const baseColor = isDestroyed ? 0x222222 : color;
@@ -105,12 +107,24 @@ function createVisualUnit(id, x, z, color, isDestroyed) {
     cabin.position.y = 0.325;
     group.add(cabin);
 
-    const barrelGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.5);
+    // Удлиняем дуло, чтобы его было хорошо видно (длина 0.6 вместо 0.5)
+    const barrelGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.6);
     const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
     const barrel = new THREE.Mesh(barrelGeo, barrelMat);
-    barrel.position.set(0, 0.4, 0.25);
-    barrel.rotation.x = isDestroyed ? Math.PI / 6 : Math.PI / 3; 
-    group.add(barrel);
+    
+    // Сдвигаем дуло вперед от центра башни
+    barrel.position.set(0, 0.4, 0.3);
+    
+    // Наклон дула вверх: если уничтожен — дуло падает вниз
+    barrel.rotation.x = isDestroyed ? Math.PI / 8 : Math.PI / 3; 
+
+    // СОЗДАЕМ НАПРАВЛЕНИЕ: Поворачиваем всю пушку в сторону противника
+    // p1 (синие слева) смотрят направо. p2 (красные справа) смотрят налево.
+    if (owner === 'p1') {
+        group.rotation.y = Math.PI / 2; // Разворот на +90 градусов (вправо)
+    } else {
+        group.rotation.y = -Math.PI / 2; // Разворот на -90 градусов (влево)
+    }
 
     group.position.set(x, 0, z);
     scene.add(group);
@@ -218,11 +232,9 @@ window.addEventListener('click', (event) => {
             
             if (!targetUnits || targetUnits.length === 0) return;
 
-            // Находим все живые пушки этой команды
             const aliveUnits = targetUnits.filter(u => !u.destroyed);
             if (aliveUnits.length === 0) return;
 
-            // Вычисляем индекс ближайшей живой пушки по её текущим случайным координатам
             let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
             if (aliveUnits.length > 1) {
                 const dist0 = Math.abs(aliveUnits[0].x - gridX) + Math.abs(aliveUnits[0].y - gridY);
@@ -307,7 +319,8 @@ function renderUnits() {
         p1.units.forEach((unit, index) => {
             const worldX = unit.x - 3.5 + p1Offset;
             const worldZ = unit.y - 3.5;
-            createVisualUnit(`p1_${index}`, worldX, worldZ, 0x1e90ff, unit.destroyed);
+            // Передаем 'p1' в конце, чтобы дуло смотрело вправо
+            createVisualUnit(`p1_${index}`, worldX, worldZ, 0x1e90ff, unit.destroyed, 'p1');
             if (unit.destroyed) burningUnitsPositions.push({ x: worldX, z: worldZ });
         });
     }
@@ -316,7 +329,8 @@ function renderUnits() {
         p2.units.forEach((unit, index) => {
             const worldX = unit.x - 3.5 + p2Offset;
             const worldZ = unit.y - 3.5;
-            createVisualUnit(`p2_${index}`, worldX, worldZ, 0xff4757, unit.destroyed);
+            // Передаем 'p2' в конце, чтобы дуло смотрело влево
+            createVisualUnit(`p2_${index}`, worldX, worldZ, 0xff4757, unit.destroyed, 'p2');
             if (unit.destroyed) burningUnitsPositions.push({ x: worldX, z: worldZ });
         });
     }
