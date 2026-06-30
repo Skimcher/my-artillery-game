@@ -8,12 +8,14 @@ let currentMode = 'fire';
 
 const visualUnits = {};     
 const particles = []; 
-const burningUnitsPositions = []; // Хранилище координат горящих пушек для постоянного спавна огня
+const burningUnitsPositions = []; 
 
 // --- НАСТРОЙКА THREE.JS ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x141414);
+
+// Меняем фон на мягкий кремовый цвет
+scene.background = new THREE.Color(0xF5F2EB);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 12, 14); 
@@ -23,31 +25,66 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 container.appendChild(renderer.domElement);
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.75); // Сделали свет чуть ярче для светлого фона
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-const gridHelperLeft = new THREE.GridHelper(8, 8, 0x1e90ff, 0x444444);
+// Сетки-разметки поверх полей делаем потемнее (коричнево-серые), чтобы они не сливались с кремовым
+const gridHelperLeft = new THREE.GridHelper(8, 8, 0x1e90ff, 0x888888);
 gridHelperLeft.position.set(-5, 0.06, 0);
 scene.add(gridHelperLeft);
 
-const gridHelperRight = new THREE.GridHelper(8, 8, 0xff4757, 0x444444);
+const gridHelperRight = new THREE.GridHelper(8, 8, 0xff4757, 0x888888);
 gridHelperRight.position.set(5, 0.06, 0);
 scene.add(gridHelperRight);
 
 const clickableCells = [];
+
+// --- ГЕНЕРАЦИЯ ПРОЦЕДУРНОЙ ТЕКСТУРЫ ЗЕМЛИ ---
+function createDirtTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+
+    // Базовый коричневый цвет земли
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(0, 0, 128, 128);
+
+    // Добавляем текстурный шум (грязь/песок)
+    for (let i = 0; i < 800; i++) {
+        const x = Math.random() * 128;
+        const y = Math.random() * 128;
+        const size = 1 + Math.random() * 2;
+        
+        // Случайные темные и светлые крупицы почвы
+        ctx.fillStyle = Math.random() > 0.5 ? '#4a3329' : '#6e4e3f';
+        ctx.fillRect(x, y, size, size);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+}
+
+const dirtTexture = createDirtTexture();
 
 function createGridPlatform(offsetX, isEnemy) {
     const size = 1; 
     for (let x = 0; x < 8; x++) {
         for (let z = 0; z < 8; z++) {
             const geometry = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
+            
+            // Накладываем текстуру земли и делаем вражеское поле чуть темнее для отличия
             const material = new THREE.MeshStandardMaterial({ 
-                color: isEnemy ? 0x2b2b2b : 0x1f1f1f,
-                roughness: 0.6 
+                map: dirtTexture,
+                color: isEnemy ? 0xcccccc : 0xffffff, // Вражеское поле слегка притемнено
+                roughness: 0.9 
             });
+            
             const cell = new THREE.Mesh(geometry, material);
             cell.position.set(x - 3.5 + offsetX, 0, z - 3.5);
             
@@ -58,24 +95,23 @@ function createGridPlatform(offsetX, isEnemy) {
     }
 }
 
-createGridPlatform(-5, false); 
-createGridPlatform(5, true);   
+createGridPlatform(-5, false); // Наше поле земли
+createGridPlatform(5, true);   // Поле земли соперника
 
 function createVisualUnit(id, x, z, color, isDestroyed) {
     const group = new THREE.Group();
     
-    // Если пушка уничтожена — красим основание в обугленный серый/черный цвет
     const baseColor = isDestroyed ? 0x222222 : color;
     const cabinColor = isDestroyed ? 0x111111 : 0x333333;
 
     const baseGeo = new THREE.BoxGeometry(0.7, 0.2, 0.7);
-    const baseMat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.8 });
+    const baseMat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.4 });
     const base = new THREE.Mesh(baseGeo, baseMat);
     base.position.y = 0.1;
     group.add(base);
 
     const cabinGeo = new THREE.BoxGeometry(0.4, 0.25, 0.4);
-    const cabinMat = new THREE.MeshStandardMaterial({ color: cabinColor, roughness: 0.9 });
+    const cabinMat = new THREE.MeshStandardMaterial({ color: cabinColor, roughness: 0.5 });
     const cabin = new THREE.Mesh(cabinGeo, cabinMat);
     cabin.position.y = 0.325;
     group.add(cabin);
@@ -84,7 +120,6 @@ function createVisualUnit(id, x, z, color, isDestroyed) {
     const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
     const barrel = new THREE.Mesh(barrelGeo, barrelMat);
     barrel.position.set(0, 0.4, 0.25);
-    // Опустим дуло подбитой техники вниз
     barrel.rotation.x = isDestroyed ? Math.PI / 6 : Math.PI / 3; 
     group.add(barrel);
 
@@ -93,9 +128,8 @@ function createVisualUnit(id, x, z, color, isDestroyed) {
     visualUnits[id] = group;
 }
 
-// Эффект мгновенного всплеска при ударе
 function createSplash(worldX, worldZ, type) {
-    const color = (type === 'hit') ? 0xffa500 : 0x8b4513;
+    const color = (type === 'hit') ? 0xffa500 : 0x5c4033; // Промах теперь выбивает коричневые ошметки земли
     const particleCount = 15;
 
     for (let i = 0; i < particleCount; i++) {
@@ -116,11 +150,9 @@ function createSplash(worldX, worldZ, type) {
     }
 }
 
-// Постоянный спавн огня и дыма над уничтоженными пушками
 function spawnFireAndSmoke() {
     burningUnitsPositions.forEach(pos => {
-        // Спавним огонек (красный/оранжевый/желтый)
-        const colors = [0xff4500, 0xff8c00, 0xffd700, 0x555555]; // Последний — серый дым
+        const colors = [0xff4500, 0xff8c00, 0xffd700, 0x444444]; 
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
         
         const geo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
@@ -133,7 +165,7 @@ function spawnFireAndSmoke() {
         particles.push({
             mesh: mesh,
             vX: (Math.random() - 0.5) * 0.02,
-            vY: 0.03 + Math.random() * 0.03, // Летит вверх
+            vY: 0.03 + Math.random() * 0.03, 
             vZ: (Math.random() - 0.5) * 0.02,
             life: 20 + Math.random() * 15
         });
@@ -197,7 +229,6 @@ window.addEventListener('click', (event) => {
             
             if (!targetUnits || targetUnits.length === 0) return;
 
-            // Находим ближайшую ЖИВУЮ пушку
             const aliveUnits = targetUnits.filter(u => !u.destroyed);
             if (aliveUnits.length === 0) return;
 
@@ -274,7 +305,7 @@ function updateTurnUI() {
 
 function renderUnits() {
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
-    burningUnitsPositions.length = 0; // Сбрасываем старые точки горения перед перерисовкой
+    burningUnitsPositions.length = 0; 
     
     const p1 = gameState.players.p1;
     const p2 = gameState.players.p2;
@@ -286,7 +317,6 @@ function renderUnits() {
             const worldX = unit.x - 3.5 + p1Offset;
             const worldZ = unit.y - 3.5;
             createVisualUnit(`p1_${index}`, worldX, worldZ, 0x1e90ff, unit.destroyed);
-            
             if (unit.destroyed) burningUnitsPositions.push({ x: worldX, z: worldZ });
         });
     }
@@ -296,27 +326,23 @@ function renderUnits() {
             const worldX = unit.x - 3.5 + p2Offset;
             const worldZ = unit.y - 3.5;
             createVisualUnit(`p2_${index}`, worldX, worldZ, 0xff4757, unit.destroyed);
-            
             if (unit.destroyed) burningUnitsPositions.push({ x: worldX, z: worldZ });
         });
     }
 }
 
-// --- ИГРОВОЙ ЦИКЛ С ОБНОВЛЕНИЕМ ЧАСТИЦ ---
 function animate() {
     requestAnimationFrame(animate);
 
-    // Спавним огонек над уничтоженными объектами каждый кадр
     spawnFireAndSmoke();
 
-    // Обновление физики частиц
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.mesh.position.x += p.vX;
         p.mesh.position.y += p.vY;
         p.mesh.position.z += p.vZ;
 
-        p.vY -= 0.003; // Небольшая гравитация
+        p.vY -= 0.003; 
         p.life--;
 
         if (p.life <= 0) {
