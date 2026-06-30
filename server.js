@@ -145,3 +145,11 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Сервер запущен на порту ${PORT}`);
 });
+// Глобальный перехватчик ошибок, чтобы сервер Render никогда не падал в статус 502
+process.on('uncaughtException', (err) => {
+    console.error('Критическая непредвиденная ошибка бэкенда:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Необработанная ошибка в Promise:', reason);
+});
