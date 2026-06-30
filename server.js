@@ -58,7 +58,8 @@ io.on('connection', (socket) => {
         }
         
         const room = rooms[roomId];
-        if (!room || room.turn !== socket.id) return; 
+        //if (!room || room.turn !== socket.id) return; 
+        if (!room) return;
 
         const isP1 = room.players.p1.id === socket.id;
         const currentPlayer = isP1 ? room.players.p1 : room.players.p2;
