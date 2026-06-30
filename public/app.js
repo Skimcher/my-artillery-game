@@ -8,7 +8,7 @@ let currentMode = 'fire';
 
 const visualUnits = {};     
 
-// --- НАСТРОЙКА THREE.JS ---
+// --- НАСТРОЙКА THREE.JS (2.5D MOBA-вид) ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x141414);
@@ -27,6 +27,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
+// Визуальные сетки (убираем их из просчета Raycaster)
 const gridHelperLeft = new THREE.GridHelper(8, 8, 0x1e90ff, 0x444444);
 gridHelperLeft.position.set(-5, 0.06, 0);
 scene.add(gridHelperLeft);
@@ -34,6 +35,9 @@ scene.add(gridHelperLeft);
 const gridHelperRight = new THREE.GridHelper(8, 8, 0xff4757, 0x444444);
 gridHelperRight.position.set(5, 0.06, 0);
 scene.add(gridHelperRight);
+
+// Массив, где мы будем хранить только кликабельные 3D-клетки полей
+const clickableCells = [];
 
 function createGridPlatform(offsetX, isEnemy) {
     const size = 1; 
@@ -46,8 +50,10 @@ function createGridPlatform(offsetX, isEnemy) {
             });
             const cell = new THREE.Mesh(geometry, material);
             cell.position.set(x - 3.5 + offsetX, 0, z - 3.5);
+            
             cell.userData = { gridX: x, gridY: z, isEnemy: isEnemy };
             scene.add(cell);
+            clickableCells.push(cell); // Добавляем в массив для точечного Raycasting
         }
     }
 }
@@ -81,90 +87,94 @@ function createVisualUnit(id, x, z, color) {
     visualUnits[id] = group;
 }
 
-// --- UI ---
+// --- UI И КНОПКИ ---
 const btnFire = document.getElementById('btn-fire');
 const btnMove = document.getElementById('btn-move');
 const turnIndicator = document.getElementById('turn-indicator');
 const timerDisplay = document.getElementById('timer');
 const controls = document.getElementById('controls');
 
-btnFire.addEventListener('click', () => { currentMode = 'fire'; btnFire.classList.add('active'); btnMove.classList.remove('active'); });
-btnMove.addEventListener('click', () => { currentMode = 'move'; btnMove.classList.add('active'); btnFire.classList.remove('active'); });
+btnFire.addEventListener('click', (e) => {
+    e.stopPropagation(); // Защита от срабатывания клика по сцене
+    currentMode = 'fire';
+    btnFire.classList.add('active');
+    btnMove.classList.remove('active');
+});
 
-// --- RAYCASTING (КЛИКИ) ---
+btnMove.addEventListener('click', (e) => {
+    e.stopPropagation(); // Защита от срабатывания клика по сцене
+    currentMode = 'move';
+    btnMove.classList.add('active');
+    btnFire.classList.remove('active');
+});
+
+// --- ОБРАБОТКА КЛИКОВ (Кроссплатформенный Raycasting через Window) ---
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
-renderer.domElement.addEventListener('click', (event) => {
-    console.log("Клик по холсту! Проверяем состояние...");
-    
-    if (!gameState) {
-        console.log("Клик проигнорирован: gameState еще не получен от сервера.");
-        return;
-    }
-    
-    if (gameState.turn !== myId) {
-        console.log(`Клик проигнорирован: Сейчас не твой ход! Твой ID: ${myId}, Ходит ID: ${gameState.turn}`);
-        // ВРЕМЕННО УБИРАЕМ КЛИЕНТСКУЮ БЛОКИРОВКУ ДЛЯ ТЕСТА, чтобы клик летел в любом случае!
-    }
+window.addEventListener('click', (event) => {
+    // Если кликнули по кнопкам интерфейса — игнорируем сцену
+    if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
 
-    const rect = renderer.domElement.getBoundingClientRect();
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    console.log("Клик зафиксирован на экране!");
+
+    // Переводим координаты мыши
+    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     raycaster.setFromCamera(pointer, camera);
-    const intersects = raycaster.intersectObjects(scene.children);
+    
+    // Проверяем пересечение ТОЛЬКО с массивом наших игровых клеток
+    const intersects = raycaster.intersectObjects(clickableCells);
 
     if (intersects.length > 0) {
         const clickedMesh = intersects[0].object;
+        const { gridX, gridY, isEnemy } = clickedMesh.userData;
 
-        if (clickedMesh.userData && clickedMesh.userData.gridX !== undefined) {
-            const { gridX, gridY, isEnemy } = clickedMesh.userData;
+        console.log(`ЛУЧ ПЕРЕСЁК КЛЕТКУ ПОЛЯ: Режим=${currentMode}, X=${gridX}, Y=${gridY}, Враг=${isEnemy}`);
 
-            console.log(`ЛУЧ ПОПАЛ В КЛЕТКУ: Режим=${currentMode}, X=${gridX}, Y=${gridY}, Враг=${isEnemy}`);
-
-            if (currentMode === 'fire') {
-                if (!isEnemy) { console.log("Нельзя стрелять по своему полю."); return; }
-                socket.emit('playerAction', { type: 'fire', x: gridX, y: gridY });
-            } 
-            else if (currentMode === 'move') {
-                if (isEnemy) { console.log("Нельзя ходить на вражеское поле."); return; }
-                
-                const myUnits = gameState.players[myRole].units;
-                let targetUnitIndex = 0;
-                
-                if (myUnits.length > 1) {
-                    const dist0 = Math.abs(myUnits[0].x - gridX) + Math.abs(myUnits[0].y - gridY);
-                    const dist1 = Math.abs(myUnits[1].x - gridX) + Math.abs(myUnits[1].y - gridY);
-                    if (dist1 < dist0) targetUnitIndex = 1;
-                }
-                
-                socket.emit('playerAction', { type: 'move', x: gridX, y: gridY, unitIndex: targetUnitIndex });
+        if (currentMode === 'fire') {
+            if (!isEnemy) return; 
+            socket.emit('playerAction', { type: 'fire', x: gridX, y: gridY });
+        } 
+        else if (currentMode === 'move') {
+            if (isEnemy) return; 
+            
+            const myUnits = gameState.players[myRole].units;
+            let targetUnitIndex = 0;
+            
+            if (myUnits.length > 1) {
+                const dist0 = Math.abs(myUnits[0].x - gridX) + Math.abs(myUnits[0].y - gridY);
+                const dist1 = Math.abs(myUnits[1].x - gridX) + Math.abs(myUnits[1].y - gridY);
+                if (dist1 < dist0) targetUnitIndex = 1;
             }
-        } else {
-            console.log("Луч попал в объект, но это не клетка поля:", clickedMesh);
+            
+            socket.emit('playerAction', { type: 'move', x: gridX, y: gridY, unitIndex: targetUnitIndex });
         }
     } else {
-        console.log("Луч Raycaster вообще ни во что не попал на сцене.");
+        console.log("Луч пролетел мимо игровых платформ.");
     }
 });
 
-// --- СЕТЬ ---
+// --- СЕТЕВАЯ ЛОГИКА ---
 socket.emit('joinGame');
 
-socket.on('waiting', (msg) => { turnIndicator.innerText = msg; });
+socket.on('waiting', (msg) => {
+    turnIndicator.innerText = msg;
+});
 
 socket.on('gameStart', (data) => {
     myRole = data.role;
     myId = socket.id;
     gameState = data.state;
-    console.log(`Игра началась! Моя роль: ${myRole}, Мой ID: ${myId}`);
     controls.classList.remove('hidden');
     updateTurnUI();
     renderUnits();
 });
 
-socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
+socket.on('timerUpdate', (time) => {
+    timerDisplay.innerText = time;
+});
 
 socket.on('turnChanged', (data) => {
     if (!gameState) return;
@@ -179,7 +189,7 @@ socket.on('gameStateUpdate', (newState) => {
 });
 
 socket.on('gameOver', (data) => {
-    alert(data.winner === myId ? "ПОБЕДА!" : "ПОРАЖЕНИЕ!");
+    alert(data.winner === myId ? "ПОБЕДА! Все пушки врага уничтожены!" : "ПОРАЖЕНИЕ! Ваши пушки уничтожены.");
     window.location.reload();
 });
 
@@ -210,7 +220,10 @@ function renderUnits() {
     });
 }
 
-function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
 animate();
 
 window.addEventListener('resize', () => {
