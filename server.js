@@ -45,10 +45,8 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- ОБРАБОТКА ХОДА ИГРОКА (ВЫСТРЕЛ ИЛИ ДВИЖЕНИЕ) ---
-  // --- ОБРАБОТКА ХОДА ИГРОКА (ВЫСТРЕЛ ИЛИ ДВИЖЕНИЕ) ---
+    // --- ОБРАБОТКА ХОДА ИГРОКА ---
     socket.on('playerAction', (data) => {
-        // Гарантированный поиск игровой комнаты, отсекая собственный ID сокета
         let roomId = null;
         for (const r of socket.rooms) {
             if (r.startsWith('room_')) {
@@ -58,8 +56,7 @@ io.on('connection', (socket) => {
         }
         
         const room = rooms[roomId];
-        //if (!room || room.turn !== socket.id) return; 
-        if (!room) return;
+        if (!room) return; // Убрали блокировку по ID для теста кликов!
 
         const isP1 = room.players.p1.id === socket.id;
         const currentPlayer = isP1 ? room.players.p1 : room.players.p2;
@@ -68,62 +65,12 @@ io.on('connection', (socket) => {
         let actionSuccess = false;
 
         if (data.type === 'fire') {
-            const hitIndex = enemyPlayer.units.findIndex(u => u.x === data.x && u.y === data.y);
-            if (hitIndex !== -1) {
-                enemyPlayer.units.splice(hitIndex, 1); 
-                if (enemyPlayer.units.length === 0) {
-                    io.to(roomId).emit('gameOver', { winner: currentPlayer.id });
-                    clearInterval(room.interval);
-                    delete rooms[roomId];
-                    return;
-                }
-            }
-            actionSuccess = true;
-        } 
-        else if (data.type === 'move') {
-            const unit = currentPlayer.units[data.unitIndex];
-            if (unit) {
-                const distanceX = Math.abs(unit.x - data.x);
-                const distanceY = Math.abs(unit.y - data.y);
-
-                if (distanceX <= 3 && distanceY <= 3) {
-                    const cellBusy = currentPlayer.units.some((u, idx) => idx !== data.unitIndex && u.x === data.x && u.y === data.y);
-                    if (!cellBusy) {
-                        unit.x = data.x;
-                        unit.y = data.y;
-                        actionSuccess = true;
-                    }
-                }
-            }
-        }
-
-        if (actionSuccess) {
-            switchTurn(room);
-        }
-    });
-        const room = rooms[roomId];
-
-        if (!room || room.turn !== socket.id) return;
-
-        if (!room || room.turn !== socket.id) return; // Защита: ходит только тот, чей ход
-
-        // Определяем, кто ходит (p1 или p2) и кто соперник
-        const isP1 = room.players.p1.id === socket.id;
-        const currentPlayer = isP1 ? room.players.p1 : room.players.p2;
-        const enemyPlayer = isP1 ? room.players.p2 : room.players.p1;
-
-        let actionSuccess = false;
-
-        if (data.type === 'fire') {
-            // ЛОГИКА ВЫСТРЕЛА
-            // Проверяем, есть ли вражеская пушка на этих координатах
             const hitIndex = enemyPlayer.units.findIndex(u => u.x === data.x && u.y === data.y);
             
             if (hitIndex !== -1) {
-                console.log(`Попадание! В комнате ${roomId} уничтожена пушка на X:${data.x}, Y:${data.y}`);
-                enemyPlayer.units.splice(hitIndex, 1); // Удаляем уничтоженную пушку
+                console.log(`Попадание в X:${data.x}, Y:${data.y}`);
+                enemyPlayer.units.splice(hitIndex, 1);
                 
-                // Проверяем условия победы
                 if (enemyPlayer.units.length === 0) {
                     io.to(roomId).emit('gameOver', { winner: currentPlayer.id });
                     clearInterval(room.interval);
@@ -133,18 +80,13 @@ io.on('connection', (socket) => {
             }
             actionSuccess = true;
         } 
-        
         else if (data.type === 'move') {
-            // ЛОГИКА ДВИЖЕНИЯ
             const unit = currentPlayer.units[data.unitIndex];
             if (unit) {
-                // Вычисляем дистанцию движения (Math.abs возвращает модуль числа)
                 const distanceX = Math.abs(unit.x - data.x);
                 const distanceY = Math.abs(unit.y - data.y);
 
-                // Движение максимум на 3 клетки в любую сторону
                 if (distanceX <= 3 && distanceY <= 3) {
-                    // Проверяем, не занята ли клетка нашей второй пушкой
                     const cellBusy = currentPlayer.units.some((u, idx) => idx !== data.unitIndex && u.x === data.x && u.y === data.y);
                     
                     if (!cellBusy) {
@@ -156,7 +98,6 @@ io.on('connection', (socket) => {
             }
         }
 
-        // Если действие выполнено успешно по правилам — передаем ход
         if (actionSuccess) {
             switchTurn(room);
         }
@@ -167,7 +108,6 @@ io.on('connection', (socket) => {
         if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
             waitingPlayer = null;
         }
-        // Если игрок вышел из активной игры, закрываем комнату
         const roomId = 'room_' + socket.id;
         if (rooms[roomId]) {
             clearInterval(rooms[roomId].interval);
@@ -190,16 +130,13 @@ function startGameTimer(roomId) {
     }, 1000);
 }
 
-// Функция смены хода
 function switchTurn(room) {
-    room.timer = 9; // Сброс таймера обратно на 9 сек
+    room.timer = 9;
     const p1Id = room.players.p1.id;
     const p2Id = room.players.p2.id;
     
-    // Меняем ID текущего игрока на противоположный
     room.turn = room.turn === p1Id ? p2Id : p1Id;
 
-    // Рассылаем обновленное состояние игры и информацию о смене хода
     io.to(room.roomId).emit('gameStateUpdate', room);
     io.to(room.roomId).emit('turnChanged', { turn: room.turn, timer: room.timer });
 }
