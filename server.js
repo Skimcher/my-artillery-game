@@ -2,7 +2,6 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
-const app = report => express();
 const expressApp = express();
 const server = http.createServer(expressApp);
 const io = new Server(server);
@@ -31,8 +30,8 @@ io.on('connection', (socket) => {
 
             rooms[roomId] = {
                 players: {
-                    p1: { id: player1.id, role: 'p1', units: [{x:1, y:1}, {x:1, y:6}] }, 
-                    p2: { id: player2.id, role: 'p2', units: [{x:6, y:1}, {x:6, y:6}] }  
+                    p1: { id: player1.id, role: 'p1', units: [{x:1, y:1, destroyed: false}, {x:1, y:6, destroyed: false}] }, 
+                    p2: { id: player2.id, role: 'p2', units: [{x:6, y:1, destroyed: false}, {x:6, y:6, destroyed: false}] }  
                 },
                 turn: player1.id, 
                 timer: 9,
@@ -65,16 +64,20 @@ io.on('connection', (socket) => {
         let actionSuccess = false;
 
         if (data.type === 'fire') {
-            const hitIndex = enemyPlayer.units.findIndex(u => u.x === data.x && u.y === data.y);
+            // Ищем только среди ЖИВЫХ пушек врага
+            const hitIndex = enemyPlayer.units.findIndex(u => !u.destroyed && u.x === data.x && u.y === data.y);
             
             if (hitIndex !== -1) {
                 console.log(`Попадание по координатам X:${data.x}, Y:${data.y}`);
-                enemyPlayer.units.splice(hitIndex, 1);
                 
-                // Передаем всем в комнате результат выстрела (hit)
+                // Вместо удаления — помечаем уничтоженной
+                enemyPlayer.units[hitIndex].destroyed = true;
+                
                 io.to(roomId).emit('fireResult', { result: 'hit', x: data.x, y: data.y, targetRole: enemyPlayer.role });
 
-                if (enemyPlayer.units.length === 0) {
+                // Проверяем, остались ли живые пушки
+                const aliveUnits = enemyPlayer.units.filter(u => !u.destroyed);
+                if (aliveUnits.length === 0) {
                     io.to(roomId).emit('gameOver', { winner: currentPlayer.id });
                     clearInterval(room.interval);
                     delete rooms[roomId];
@@ -82,14 +85,14 @@ io.on('connection', (socket) => {
                 }
             } else {
                 console.log(`Промах по координатам X:${data.x}, Y:${data.y}`);
-                // Передаем всем в комнате результат выстрела (miss)
                 io.to(roomId).emit('fireResult', { result: 'miss', x: data.x, y: data.y, targetRole: enemyPlayer.role });
             }
             actionSuccess = true;
         } 
         else if (data.type === 'move') {
             const unit = currentPlayer.units[data.unitIndex];
-            if (unit) {
+            // Уничтоженная пушка ходить не может!
+            if (unit && !unit.destroyed) {
                 const distanceX = Math.abs(unit.x - data.x);
                 const distanceY = Math.abs(unit.y - data.y);
 
@@ -144,13 +147,17 @@ function broadcastState(room) {
     if (p2Socket) p2Socket.emit('gameStateUpdate', getMaskedState(room, 'p2'));
 }
 
+// Фильтрация тумана войны: отдаем свои пушки ВСЕГДА, а вражеские — ТОЛЬКО если они destroyed: true
 function getMaskedState(room, targetRole) {
+    const p1Filtered = room.players.p1.units.filter(u => targetRole === 'p1' || u.destroyed);
+    const p2Filtered = room.players.p2.units.filter(u => targetRole === 'p2' || u.destroyed);
+
     return {
         turn: room.turn,
         timer: room.timer,
         players: {
-            p1: { role: 'p1', units: targetRole === 'p1' ? [...room.players.p1.units] : [] },
-            p2: { role: 'p2', units: targetRole === 'p2' ? [...room.players.p2.units] : [] }
+            p1: { role: 'p1', units: p1Filtered },
+            p2: { role: 'p2', units: p2Filtered }
         }
     };
 }
