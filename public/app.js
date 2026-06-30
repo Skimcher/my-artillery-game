@@ -8,7 +8,7 @@ let currentMode = 'fire';
 
 const visualUnits = {};     
 
-// --- НАСТРОЙКА THREE.JS (Вид сверху под углом) ---
+// --- НАСТРОЙКА THREE.JS ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x141414);
@@ -27,7 +27,6 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-// Визуальная сетка поверх полей
 const gridHelperLeft = new THREE.GridHelper(8, 8, 0x1e90ff, 0x444444);
 gridHelperLeft.position.set(-5, 0.06, 0);
 scene.add(gridHelperLeft);
@@ -36,7 +35,6 @@ const gridHelperRight = new THREE.GridHelper(8, 8, 0xff4757, 0x444444);
 gridHelperRight.position.set(5, 0.06, 0);
 scene.add(gridHelperRight);
 
-// Сюда складываем только плитки полей для Raycasting
 const clickableCells = [];
 
 function createGridPlatform(offsetX, isEnemy) {
@@ -58,8 +56,8 @@ function createGridPlatform(offsetX, isEnemy) {
     }
 }
 
-createGridPlatform(-5, false); // Наше синее поле (слева)
-createGridPlatform(5, true);   // Чужое красное поле (справа)
+createGridPlatform(-5, false); // Синее поле (слева)
+createGridPlatform(5, true);   // Красное поле (справа)
 
 function createVisualUnit(id, x, z, color) {
     const group = new THREE.Group();
@@ -108,14 +106,14 @@ btnMove.addEventListener('click', (e) => {
     btnFire.classList.remove('active');
 });
 
-// --- ОБРАБОТКА КЛИКОВ (RAYCASTING ЧЕРЕЗ WINDOW) ---
-const raycaster = new THREE.Raycaster();
-const pointer = new THREE.Vector2();
-
+// --- ОБРАБОТКА КЛИКОВ ---
 window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
 
     if (!gameState) return;
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
 
     pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
     pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -127,13 +125,10 @@ window.addEventListener('click', (event) => {
         const clickedMesh = intersects[0].object;
         const { gridX, gridY, isEnemy } = clickedMesh.userData;
 
-        console.log(`Клик зафиксирован: Режим=${currentMode}, X=${gridX}, Y=${gridY}, Враг=${isEnemy}`);
-
         if (currentMode === 'fire') {
-            // Выстрел: целимся по вражескому (правому/красному) полю
-            if (!isEnemy) { console.log("Стрелять можно только по чужому полю!"); return; }
+            if (!isEnemy) return;
             
-            // Стреляет тот, чье сейчас поле активное на экране (для соло-тестов)
+            // Соло-тест: если ход не наш, стреляем за противоположную роль
             const firingRole = (gameState.turn === myId) ? myRole : (myRole === 'p1' ? 'p2' : 'p1');
             
             socket.emit('playerAction', { 
@@ -144,14 +139,16 @@ window.addEventListener('click', (event) => {
             });
         } 
         else if (currentMode === 'move') {
-            // Перемещение: ходим СТРОГО по полю выбранного цвета плитки
-            // Если кликнули по левому полю (isEnemy === false) — двигаем синих (p1)
-            // Если кликнули по правому полю (isEnemy === true) — двигаем красных (p2)
             const targetRole = isEnemy ? 'p2' : 'p1';
             const targetUnits = gameState.players[targetRole].units;
-            let targetUnitIndex = 0;
             
-            // Находим ближайшую к клику пушку выбранного цвета
+            // Если массив пуст (скрыт туманом войны), прерываем ход
+            if (!targetUnits || targetUnits.length === 0) {
+                console.log("Вы не можете двигать невидимые пушки!");
+                return;
+            }
+
+            let targetUnitIndex = 0;
             if (targetUnits.length > 1) {
                 const dist0 = Math.abs(targetUnits[0].x - gridX) + Math.abs(targetUnits[0].y - gridY);
                 const dist1 = Math.abs(targetUnits[1].x - gridX) + Math.abs(targetUnits[1].y - gridY);
@@ -172,9 +169,7 @@ window.addEventListener('click', (event) => {
 // --- СЕТЕВАЯ ЛОГИКА ---
 socket.emit('joinGame');
 
-socket.on('waiting', (msg) => {
-    turnIndicator.innerText = msg;
-});
+socket.on('waiting', (msg) => { turnIndicator.innerText = msg; });
 
 socket.on('gameStart', (data) => {
     myRole = data.role;
@@ -185,9 +180,7 @@ socket.on('gameStart', (data) => {
     renderUnits();
 });
 
-socket.on('timerUpdate', (time) => {
-    timerDisplay.innerText = time;
-});
+socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
 
 socket.on('turnChanged', (data) => {
     if (!gameState) return;
@@ -217,6 +210,7 @@ function updateTurnUI() {
 }
 
 function renderUnits() {
+    // Удаляем старые модельки
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     
     const p1 = gameState.players.p1;
@@ -224,19 +218,22 @@ function renderUnits() {
     const p1Offset = -5;
     const p2Offset = 5;
 
-    p1.units.forEach((unit, index) => {
-        createVisualUnit(`p1_${index}`, unit.x - 3.5 + p1Offset, unit.y - 3.5, 0x1e90ff);
-    });
+    // Отрисовка синих (если они видны клиенту)
+    if (p1 && p1.units) {
+        p1.units.forEach((unit, index) => {
+            createVisualUnit(`p1_${index}`, unit.x - 3.5 + p1Offset, unit.y - 3.5, 0x1e90ff);
+        });
+    }
 
-    p2.units.forEach((unit, index) => {
-        createVisualUnit(`p2_${index}`, unit.x - 3.5 + p2Offset, unit.y - 3.5, 0xff4757);
-    });
+    // Отрисовка красных (если они видны клиенту)
+    if (p2 && p2.units) {
+        p2.units.forEach((unit, index) => {
+            createVisualUnit(`p2_${index}`, unit.x - 3.5 + p2Offset, unit.y - 3.5, 0xff4757);
+        });
+    }
 }
 
-function animate() {
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
-}
+function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
 animate();
 
 window.addEventListener('resize', () => {
