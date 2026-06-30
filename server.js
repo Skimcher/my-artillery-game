@@ -46,10 +46,18 @@ io.on('connection', (socket) => {
     });
 
     // --- ОБРАБОТКА ХОДА ИГРОКА (ВЫСТРЕЛ ИЛИ ДВИЖЕНИЕ) ---
-    socket.on('playerAction', (data) => {
-        // Ищем, в какой комнате находится этот игрок
-        const roomId = Array.from(socket.rooms).find(r => r.startsWith('room_'));
+   socket.on('playerAction', (data) => {
+        // Находим комнату, в которой состоит игрок
+        let roomId = null;
+        for (const r of socket.rooms) {
+            if (r.startsWith('room_')) {
+                roomId = r;
+                break;
+            }
+        }
         const room = rooms[roomId];
+
+        if (!room || room.turn !== socket.id) return;
 
         if (!room || room.turn !== socket.id) return; // Защита: ходит только тот, чей ход
 
