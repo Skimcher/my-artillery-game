@@ -1,18 +1,19 @@
 const socket = io();
 
 // --- СОСТОЯНИЕ ИГРЫ ---
-let myRole = null;          
-let myId = null;            
-let gameState = null;       
-let currentMode = 'fire';   
+let myRole = null;          // 'p1' или 'p2'
+let myId = null;            // Socket ID игрока
+let gameState = null;       // Текущий объект игры от сервера
+let currentMode = 'fire';   // Режим: 'fire' или 'move'
 
-const visualUnits = {};     
+const visualUnits = {};     // Хранилище 3D-моделей пушек для обновления позиций
 
-// --- НАСТРОЙКА THREE.JS ---
+// --- НАСТРОЙКА THREE.JS (2.5D MOBA-вид) ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x141414);
 
+// Камера под углом сверху и сбоку (Изометрия)
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 12, 14); 
 camera.lookAt(0, 1, 0);
@@ -21,12 +22,15 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 container.appendChild(renderer.domElement);
 
+// Освещение сцены
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
+
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
+// Визуальные сетки поверх полей
 const gridHelperLeft = new THREE.GridHelper(8, 8, 0x1e90ff, 0x444444);
 gridHelperLeft.position.set(-5, 0.06, 0);
 scene.add(gridHelperLeft);
@@ -35,6 +39,7 @@ const gridHelperRight = new THREE.GridHelper(8, 8, 0xff4757, 0x444444);
 gridHelperRight.position.set(5, 0.06, 0);
 scene.add(gridHelperRight);
 
+// --- СОЗДАНИЕ ПЛАТФОРМ ПОЛЕЙ (8х8) ---
 function createGridPlatform(offsetX, isEnemy) {
     const size = 1; 
     for (let x = 0; x < 8; x++) {
@@ -46,29 +51,36 @@ function createGridPlatform(offsetX, isEnemy) {
             });
             const cell = new THREE.Mesh(geometry, material);
             cell.position.set(x - 3.5 + offsetX, 0, z - 3.5);
+            
+            // Записываем данные клетки в userData для Raycasting
             cell.userData = { gridX: x, gridY: z, isEnemy: isEnemy };
             scene.add(cell);
         }
     }
 }
 
-createGridPlatform(-5, false); 
-createGridPlatform(5, true);   
+createGridPlatform(-5, false); // Моё поле (слева)
+createGridPlatform(5, true);   // Поле соперника (справа)
 
+// --- СОЗДАНИЕ 3D МОДЕЛЕЙ АРТИЛЛЕРИИ ---
 function createVisualUnit(id, x, z, color) {
     const group = new THREE.Group();
+    
+    // Основание (гусеницы/платформа)
     const baseGeo = new THREE.BoxGeometry(0.7, 0.2, 0.7);
     const baseMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4 });
     const base = new THREE.Mesh(baseGeo, baseMat);
     base.position.y = 0.1;
     group.add(base);
 
+    // Башня пушки
     const cabinGeo = new THREE.BoxGeometry(0.4, 0.25, 0.4);
     const cabinMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
     const cabin = new THREE.Mesh(cabinGeo, cabinMat);
     cabin.position.y = 0.325;
     group.add(cabin);
 
+    // Дуло (направлено вперед)
     const barrelGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.5);
     const barrelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
     const barrel = new THREE.Mesh(barrelGeo, barrelMat);
@@ -81,25 +93,38 @@ function createVisualUnit(id, x, z, color) {
     visualUnits[id] = group;
 }
 
-// --- UI ---
+// --- ИНТЕРФЕЙС И КНОПКИ УПРАВЛЕНИЯ ---
 const btnFire = document.getElementById('btn-fire');
 const btnMove = document.getElementById('btn-move');
 const turnIndicator = document.getElementById('turn-indicator');
 const timerDisplay = document.getElementById('timer');
 const controls = document.getElementById('controls');
 
-btnFire.addEventListener('click', () => { currentMode = 'fire'; btnFire.classList.add('active'); btnMove.classList.remove('active'); });
-btnMove.addEventListener('click', () => { currentMode = 'move'; btnMove.classList.add('active'); btnFire.classList.remove('active'); });
+btnFire.addEventListener('click', () => {
+    currentMode = 'fire';
+    btnFire.classList.add('active');
+    btnMove.classList.remove('active');
+});
 
-// --- RAYCASTING (КЛИКИ) ---
+btnMove.addEventListener('click', () => {
+    currentMode = 'move';
+    btnMove.classList.add('active');
+    btnFire.classList.remove('active');
+});
+
+// --- ОБРАБОТКА КЛИКОВ (RAYCASTING) ---
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
-window.addEventListener('click', (event) => {
+// Слушаем клики только по 3D-холсту, полностью игнорируя HTML-кнопки сверху
+renderer.domElement.addEventListener('click', (event) => {
+    // Если игра не началась или сейчас не наш ход — клики заблокированы
     if (!gameState || gameState.turn !== myId) return;
 
-    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    // Точный расчет координат клика относительно игрового холста
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
     raycaster.setFromCamera(pointer, camera);
     const intersects = raycaster.intersectObjects(scene.children);
@@ -107,16 +132,23 @@ window.addEventListener('click', (event) => {
     if (intersects.length > 0) {
         const clickedMesh = intersects[0].object;
 
+        // Проверяем, что кликнули именно по клетке поля
         if (clickedMesh.userData && clickedMesh.userData.gridX !== undefined) {
             const { gridX, gridY, isEnemy } = clickedMesh.userData;
 
-            if (currentMode === 'fire' && isEnemy) {
+            console.log(`Клик зафиксирован: режим ${currentMode}, X: ${gridX}, Y: ${gridY}, Враг: ${isEnemy}`);
+
+            if (currentMode === 'fire') {
+                if (!isEnemy) return; // Стрелять можно только по чужому поле
                 socket.emit('playerAction', { type: 'fire', x: gridX, y: gridY });
             } 
-            else if (currentMode === 'move' && !isEnemy) {
-                // Находим, какая из наших пушек ближе к клику, чтобы передвинуть именно её
+            else if (currentMode === 'move') {
+                if (isEnemy) return; // Двигаться можно только по своему полю
+                
+                // Автоматически находим, какая из наших пушек ближе к месту клика, чтобы переместить именно её
                 const myUnits = gameState.players[myRole].units;
                 let targetUnitIndex = 0;
+                
                 if (myUnits.length > 1) {
                     const dist0 = Math.abs(myUnits[0].x - gridX) + Math.abs(myUnits[0].y - gridY);
                     const dist1 = Math.abs(myUnits[1].x - gridX) + Math.abs(myUnits[1].y - gridY);
@@ -129,21 +161,28 @@ window.addEventListener('click', (event) => {
     }
 });
 
-// --- СЕТЬ ---
+// --- СЕТЕВАЯ ЛОГИКА (SOCKET.IO) ---
+
+// Автоматический поиск комнаты при старте
 socket.emit('joinGame');
 
-socket.on('waiting', (msg) => { turnIndicator.innerText = msg; });
+socket.on('waiting', (msg) => {
+    turnIndicator.innerText = msg;
+});
 
 socket.on('gameStart', (data) => {
     myRole = data.role;
     myId = socket.id;
     gameState = data.state;
+    
     controls.classList.remove('hidden');
     updateTurnUI();
     renderUnits();
 });
 
-socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
+socket.on('timerUpdate', (time) => {
+    timerDisplay.innerText = time;
+});
 
 socket.on('turnChanged', (data) => {
     if (!gameState) return;
@@ -152,9 +191,20 @@ socket.on('turnChanged', (data) => {
     updateTurnUI();
 });
 
+// Принудительное обновление состояния полей после выстрела или движения
 socket.on('gameStateUpdate', (newState) => {
     gameState = newState;
     renderUnits();
+});
+
+// Конец игры
+socket.on('gameOver', (data) => {
+    if (data.winner === myId) {
+        alert("ПОБЕДА! Вы уничтожили всю артиллерию противника!");
+    } else {
+        alert("ПОРАЖЕНИЕ! Все ваши установки уничтожены.");
+    }
+    window.location.reload(); 
 });
 
 function updateTurnUI() {
@@ -167,31 +217,36 @@ function updateTurnUI() {
     }
 }
 
+// Отрисовка пушек игроков на базе серверных координат
 function renderUnits() {
+    // Очищаем старые модели со сцены
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     
     const p1 = gameState.players.p1;
     const p2 = gameState.players.p2;
-    const p1Offset = -5;
-    const p2Offset = 5;
 
+    const p1Offset = -5; // Смещение синего поля (влево)
+    const p2Offset = 5;  // Смещение красного поля (вправо)
+
+    // Отрисовка Игрока 1 (Синий цвет)
     p1.units.forEach((unit, index) => {
         createVisualUnit(`p1_${index}`, unit.x - 3.5 + p1Offset, unit.y - 3.5, 0x1e90ff);
     });
 
+    // Отрисовка Игрока 2 (Красный цвет)
     p2.units.forEach((unit, index) => {
         createVisualUnit(`p2_${index}`, unit.x - 3.5 + p2Offset, unit.y - 3.5, 0xff4757);
     });
 }
 
-socket.on('gameOver', (data) => {
-    alert(data.winner === myId ? "ПОБЕДА!" : "ПОРАЖЕНИЕ!");
-    window.location.reload();
-});
-
-function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+// --- ИГРОВОЙ ЦИКЛ ---
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
 animate();
 
+// Ресайз под размеры экрана
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
