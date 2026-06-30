@@ -56,11 +56,11 @@ io.on('connection', (socket) => {
         }
         
         const room = rooms[roomId];
-        if (!room) return; // Убрали блокировку по ID для теста кликов!
+        if (!room) return; 
 
-        const isP1 = room.players.p1.id === socket.id;
-        const currentPlayer = isP1 ? room.players.p1 : room.players.p2;
-        const enemyPlayer = isP1 ? room.players.p2 : room.players.p1;
+        // Приоритет форсированной роли от клиента (для точного теста)
+        const currentPlayer = data.forcedRole ? room.players[data.forcedRole] : (room.players.p1.id === socket.id ? room.players.p1 : room.players.p2);
+        const enemyPlayer = currentPlayer.role === 'p1' ? room.players.p2 : room.players.p1;
 
         let actionSuccess = false;
 
@@ -68,7 +68,7 @@ io.on('connection', (socket) => {
             const hitIndex = enemyPlayer.units.findIndex(u => u.x === data.x && u.y === data.y);
             
             if (hitIndex !== -1) {
-                console.log(`Попадание в X:${data.x}, Y:${data.y}`);
+                console.log(`Попадание в поле ${enemyPlayer.role} по координатам X:${data.x}, Y:${data.y}`);
                 enemyPlayer.units.splice(hitIndex, 1);
                 
                 if (enemyPlayer.units.length === 0) {
@@ -86,6 +86,7 @@ io.on('connection', (socket) => {
                 const distanceX = Math.abs(unit.x - data.x);
                 const distanceY = Math.abs(unit.y - data.y);
 
+                // Ограничение хода: максимум на 3 клетки во все стороны
                 if (distanceX <= 3 && distanceY <= 3) {
                     const cellBusy = currentPlayer.units.some((u, idx) => idx !== data.unitIndex && u.x === data.x && u.y === data.y);
                     
@@ -145,11 +146,11 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Сервер запущен на порту ${PORT}`);
 });
-// Глобальный перехватчик ошибок, чтобы сервер Render никогда не падал в статус 502
-process.on('uncaughtException', (err) => {
-    console.error('Критическая непредвиденная ошибка бэкенда:', err);
-});
 
+// Глобальный перехватчик сбоев бэкенда для Render
+process.on('uncaughtException', (err) => {
+    console.error('Критическая ошибка бэкенда:', err);
+});
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('Необработанная ошибка в Promise:', reason);
+    console.error('Необработанный отказ в Promise:', reason);
 });
