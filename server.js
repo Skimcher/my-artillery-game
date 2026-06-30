@@ -46,8 +46,9 @@ io.on('connection', (socket) => {
     });
 
     // --- ОБРАБОТКА ХОДА ИГРОКА (ВЫСТРЕЛ ИЛИ ДВИЖЕНИЕ) ---
-   socket.on('playerAction', (data) => {
-        // Находим комнату, в которой состоит игрок
+  // --- ОБРАБОТКА ХОДА ИГРОКА (ВЫСТРЕЛ ИЛИ ДВИЖЕНИЕ) ---
+    socket.on('playerAction', (data) => {
+        // Гарантированный поиск игровой комнаты, отсекая собственный ID сокета
         let roomId = null;
         for (const r of socket.rooms) {
             if (r.startsWith('room_')) {
@@ -55,6 +56,50 @@ io.on('connection', (socket) => {
                 break;
             }
         }
+        
+        const room = rooms[roomId];
+        if (!room || room.turn !== socket.id) return; 
+
+        const isP1 = room.players.p1.id === socket.id;
+        const currentPlayer = isP1 ? room.players.p1 : room.players.p2;
+        const enemyPlayer = isP1 ? room.players.p2 : room.players.p1;
+
+        let actionSuccess = false;
+
+        if (data.type === 'fire') {
+            const hitIndex = enemyPlayer.units.findIndex(u => u.x === data.x && u.y === data.y);
+            if (hitIndex !== -1) {
+                enemyPlayer.units.splice(hitIndex, 1); 
+                if (enemyPlayer.units.length === 0) {
+                    io.to(roomId).emit('gameOver', { winner: currentPlayer.id });
+                    clearInterval(room.interval);
+                    delete rooms[roomId];
+                    return;
+                }
+            }
+            actionSuccess = true;
+        } 
+        else if (data.type === 'move') {
+            const unit = currentPlayer.units[data.unitIndex];
+            if (unit) {
+                const distanceX = Math.abs(unit.x - data.x);
+                const distanceY = Math.abs(unit.y - data.y);
+
+                if (distanceX <= 3 && distanceY <= 3) {
+                    const cellBusy = currentPlayer.units.some((u, idx) => idx !== data.unitIndex && u.x === data.x && u.y === data.y);
+                    if (!cellBusy) {
+                        unit.x = data.x;
+                        unit.y = data.y;
+                        actionSuccess = true;
+                    }
+                }
+            }
+        }
+
+        if (actionSuccess) {
+            switchTurn(room);
+        }
+    });
         const room = rooms[roomId];
 
         if (!room || room.turn !== socket.id) return;
