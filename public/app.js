@@ -7,7 +7,8 @@ let gameState = null;
 let currentMode = 'fire';   
 
 const visualUnits = {};     
-const particles = []; // Массив для анимации всплесков
+const particles = []; 
+const burningUnitsPositions = []; // Хранилище координат горящих пушек для постоянного спавна огня
 
 // --- НАСТРОЙКА THREE.JS ---
 const container = document.getElementById('canvas-container');
@@ -60,25 +61,31 @@ function createGridPlatform(offsetX, isEnemy) {
 createGridPlatform(-5, false); 
 createGridPlatform(5, true);   
 
-function createVisualUnit(id, x, z, color) {
+function createVisualUnit(id, x, z, color, isDestroyed) {
     const group = new THREE.Group();
+    
+    // Если пушка уничтожена — красим основание в обугленный серый/черный цвет
+    const baseColor = isDestroyed ? 0x222222 : color;
+    const cabinColor = isDestroyed ? 0x111111 : 0x333333;
+
     const baseGeo = new THREE.BoxGeometry(0.7, 0.2, 0.7);
-    const baseMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4 });
+    const baseMat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.8 });
     const base = new THREE.Mesh(baseGeo, baseMat);
     base.position.y = 0.1;
     group.add(base);
 
     const cabinGeo = new THREE.BoxGeometry(0.4, 0.25, 0.4);
-    const cabinMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    const cabinMat = new THREE.MeshStandardMaterial({ color: cabinColor, roughness: 0.9 });
     const cabin = new THREE.Mesh(cabinGeo, cabinMat);
     cabin.position.y = 0.325;
     group.add(cabin);
 
     const barrelGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.5);
-    const barrelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+    const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
     const barrel = new THREE.Mesh(barrelGeo, barrelMat);
     barrel.position.set(0, 0.4, 0.25);
-    barrel.rotation.x = Math.PI / 3; 
+    // Опустим дуло подбитой техники вниз
+    barrel.rotation.x = isDestroyed ? Math.PI / 6 : Math.PI / 3; 
     group.add(barrel);
 
     group.position.set(x, 0, z);
@@ -86,9 +93,8 @@ function createVisualUnit(id, x, z, color) {
     visualUnits[id] = group;
 }
 
-// --- ФУНКЦИЯ СОЗДАНИЯ 3D ВСПЛЕСКА (ЭФФЕКТЫ ЧАСТИЦ) ---
+// Эффект мгновенного всплеска при ударе
 function createSplash(worldX, worldZ, type) {
-    // Попадание: Оранжевый (0xffa500), Промах: Коричневый (0x8b4513)
     const color = (type === 'hit') ? 0xffa500 : 0x8b4513;
     const particleCount = 15;
 
@@ -97,19 +103,41 @@ function createSplash(worldX, worldZ, type) {
         const mat = new THREE.MeshBasicMaterial({ color: color });
         const mesh = new THREE.Mesh(geo, mat);
 
-        // Позиционируем в месте взрыва
         mesh.position.set(worldX + (Math.random() - 0.5) * 0.3, 0.2, worldZ + (Math.random() - 0.5) * 0.3);
         scene.add(mesh);
 
-        // Задаем случайные векторы скоростей для разлета
         particles.push({
             mesh: mesh,
             vX: (Math.random() - 0.5) * 0.1,
-            vY: 0.1 + Math.random() * 0.1, // Вверх
+            vY: 0.1 + Math.random() * 0.1, 
             vZ: (Math.random() - 0.5) * 0.1,
-            life: 30 // Время жизни в кадрах
+            life: 30 
         });
     }
+}
+
+// Постоянный спавн огня и дыма над уничтоженными пушками
+function spawnFireAndSmoke() {
+    burningUnitsPositions.forEach(pos => {
+        // Спавним огонек (красный/оранжевый/желтый)
+        const colors = [0xff4500, 0xff8c00, 0xffd700, 0x555555]; // Последний — серый дым
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        
+        const geo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
+        const mat = new THREE.MeshBasicMaterial({ color: randomColor });
+        const mesh = new THREE.Mesh(geo, mat);
+        
+        mesh.position.set(pos.x + (Math.random() - 0.5) * 0.2, 0.4, pos.z + (Math.random() - 0.5) * 0.2);
+        scene.add(mesh);
+        
+        particles.push({
+            mesh: mesh,
+            vX: (Math.random() - 0.5) * 0.02,
+            vY: 0.03 + Math.random() * 0.03, // Летит вверх
+            vZ: (Math.random() - 0.5) * 0.02,
+            life: 20 + Math.random() * 15
+        });
+    });
 }
 
 // --- UI И КНОПКИ ---
@@ -169,11 +197,17 @@ window.addEventListener('click', (event) => {
             
             if (!targetUnits || targetUnits.length === 0) return;
 
-            let targetUnitIndex = 0;
-            if (targetUnits.length > 1) {
-                const dist0 = Math.abs(targetUnits[0].x - gridX) + Math.abs(targetUnits[0].y - gridY);
-                const dist1 = Math.abs(targetUnits[1].x - gridX) + Math.abs(targetUnits[1].y - gridY);
-                if (dist1 < dist0) targetUnitIndex = 1;
+            // Находим ближайшую ЖИВУЮ пушку
+            const aliveUnits = targetUnits.filter(u => !u.destroyed);
+            if (aliveUnits.length === 0) return;
+
+            let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
+            if (aliveUnits.length > 1) {
+                const dist0 = Math.abs(aliveUnits[0].x - gridX) + Math.abs(aliveUnits[0].y - gridY);
+                const dist1 = Math.abs(aliveUnits[1].x - gridX) + Math.abs(aliveUnits[1].y - gridY);
+                if (dist1 < dist0) {
+                    targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[1]);
+                }
             }
             
             socket.emit('playerAction', { 
@@ -215,7 +249,6 @@ socket.on('gameStateUpdate', (newState) => {
     renderUnits();
 });
 
-// СЛУШАЕМ РЕЗУЛЬТАТ ВЫСТРЕЛОВ И СОЗДАЕМ КРАСИВЫЕ ЭФФЕКТЫ
 socket.on('fireResult', (data) => {
     const offset = data.targetRole === 'p2' ? 5 : -5;
     const worldX = data.x - 3.5 + offset;
@@ -241,6 +274,7 @@ function updateTurnUI() {
 
 function renderUnits() {
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
+    burningUnitsPositions.length = 0; // Сбрасываем старые точки горения перед перерисовкой
     
     const p1 = gameState.players.p1;
     const p2 = gameState.players.p2;
@@ -249,13 +283,21 @@ function renderUnits() {
 
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
-            createVisualUnit(`p1_${index}`, unit.x - 3.5 + p1Offset, unit.y - 3.5, 0x1e90ff);
+            const worldX = unit.x - 3.5 + p1Offset;
+            const worldZ = unit.y - 3.5;
+            createVisualUnit(`p1_${index}`, worldX, worldZ, 0x1e90ff, unit.destroyed);
+            
+            if (unit.destroyed) burningUnitsPositions.push({ x: worldX, z: worldZ });
         });
     }
 
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
-            createVisualUnit(`p2_${index}`, unit.x - 3.5 + p2Offset, unit.y - 3.5, 0xff4757);
+            const worldX = unit.x - 3.5 + p2Offset;
+            const worldZ = unit.y - 3.5;
+            createVisualUnit(`p2_${index}`, worldX, worldZ, 0xff4757, unit.destroyed);
+            
+            if (unit.destroyed) burningUnitsPositions.push({ x: worldX, z: worldZ });
         });
     }
 }
@@ -264,17 +306,19 @@ function renderUnits() {
 function animate() {
     requestAnimationFrame(animate);
 
-    // Анимация и обновление физики всплесков
+    // Спавним огонек над уничтоженными объектами каждый кадр
+    spawnFireAndSmoke();
+
+    // Обновление физики частиц
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.mesh.position.x += p.vX;
         p.mesh.position.y += p.vY;
         p.mesh.position.z += p.vZ;
 
-        p.vY -= 0.008; // Гравитация тянет частицы вниз
+        p.vY -= 0.003; // Небольшая гравитация
         p.life--;
 
-        // Удаляем старые частицы со сцены
         if (p.life <= 0) {
             scene.remove(p.mesh);
             particles.splice(i, 1);
