@@ -8,7 +8,7 @@ let currentMode = 'fire';
 
 const visualUnits = {};     
 
-// --- НАСТРОЙКА THREE.JS (2.5D MOBA-вид) ---
+// --- НАСТРОЙКА THREE.JS (Вид сверху под углом) ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x141414);
@@ -27,7 +27,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-// Визуальные сетки (убираем их из просчета Raycaster)
+// Визуальная сетка поверх полей
 const gridHelperLeft = new THREE.GridHelper(8, 8, 0x1e90ff, 0x444444);
 gridHelperLeft.position.set(-5, 0.06, 0);
 scene.add(gridHelperLeft);
@@ -36,7 +36,7 @@ const gridHelperRight = new THREE.GridHelper(8, 8, 0xff4757, 0x444444);
 gridHelperRight.position.set(5, 0.06, 0);
 scene.add(gridHelperRight);
 
-// Массив, где мы будем хранить только кликабельные 3D-клетки полей
+// Сюда складываем только плитки полей для Raycasting
 const clickableCells = [];
 
 function createGridPlatform(offsetX, isEnemy) {
@@ -53,13 +53,13 @@ function createGridPlatform(offsetX, isEnemy) {
             
             cell.userData = { gridX: x, gridY: z, isEnemy: isEnemy };
             scene.add(cell);
-            clickableCells.push(cell); // Добавляем в массив для точечного Raycasting
+            clickableCells.push(cell); 
         }
     }
 }
 
-createGridPlatform(-5, false); 
-createGridPlatform(5, true);   
+createGridPlatform(-5, false); // Наше синее поле (слева)
+createGridPlatform(5, true);   // Чужое красное поле (справа)
 
 function createVisualUnit(id, x, z, color) {
     const group = new THREE.Group();
@@ -95,64 +95,77 @@ const timerDisplay = document.getElementById('timer');
 const controls = document.getElementById('controls');
 
 btnFire.addEventListener('click', (e) => {
-    e.stopPropagation(); // Защита от срабатывания клика по сцене
+    e.stopPropagation(); 
     currentMode = 'fire';
     btnFire.classList.add('active');
     btnMove.classList.remove('active');
 });
 
 btnMove.addEventListener('click', (e) => {
-    e.stopPropagation(); // Защита от срабатывания клика по сцене
+    e.stopPropagation(); 
     currentMode = 'move';
     btnMove.classList.add('active');
     btnFire.classList.remove('active');
 });
 
-// --- ОБРАБОТКА КЛИКОВ (Кроссплатформенный Raycasting через Window) ---
+// --- ОБРАБОТКА КЛИКОВ (RAYCASTING ЧЕРЕЗ WINDOW) ---
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
 window.addEventListener('click', (event) => {
-    // Если кликнули по кнопкам интерфейса — игнорируем сцену
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
 
-    console.log("Клик зафиксирован на экране!");
+    if (!gameState) return;
 
-    // Переводим координаты мыши
     pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
     pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     raycaster.setFromCamera(pointer, camera);
-    
-    // Проверяем пересечение ТОЛЬКО с массивом наших игровых клеток
     const intersects = raycaster.intersectObjects(clickableCells);
 
     if (intersects.length > 0) {
         const clickedMesh = intersects[0].object;
         const { gridX, gridY, isEnemy } = clickedMesh.userData;
 
-        console.log(`ЛУЧ ПЕРЕСЁК КЛЕТКУ ПОЛЯ: Режим=${currentMode}, X=${gridX}, Y=${gridY}, Враг=${isEnemy}`);
+        console.log(`Клик зафиксирован: Режим=${currentMode}, X=${gridX}, Y=${gridY}, Враг=${isEnemy}`);
 
         if (currentMode === 'fire') {
-            if (!isEnemy) return; 
-            socket.emit('playerAction', { type: 'fire', x: gridX, y: gridY });
+            // Выстрел: целимся по вражескому (правому/красному) полю
+            if (!isEnemy) { console.log("Стрелять можно только по чужому полю!"); return; }
+            
+            // Стреляет тот, чье сейчас поле активное на экране (для соло-тестов)
+            const firingRole = (gameState.turn === myId) ? myRole : (myRole === 'p1' ? 'p2' : 'p1');
+            
+            socket.emit('playerAction', { 
+                type: 'fire', 
+                x: gridX, 
+                y: gridY,
+                forcedRole: firingRole 
+            });
         } 
         else if (currentMode === 'move') {
-            if (isEnemy) return; 
-            
-            const myUnits = gameState.players[myRole].units;
+            // Перемещение: ходим СТРОГО по полю выбранного цвета плитки
+            // Если кликнули по левому полю (isEnemy === false) — двигаем синих (p1)
+            // Если кликнули по правому полю (isEnemy === true) — двигаем красных (p2)
+            const targetRole = isEnemy ? 'p2' : 'p1';
+            const targetUnits = gameState.players[targetRole].units;
             let targetUnitIndex = 0;
             
-            if (myUnits.length > 1) {
-                const dist0 = Math.abs(myUnits[0].x - gridX) + Math.abs(myUnits[0].y - gridY);
-                const dist1 = Math.abs(myUnits[1].x - gridX) + Math.abs(myUnits[1].y - gridY);
+            // Находим ближайшую к клику пушку выбранного цвета
+            if (targetUnits.length > 1) {
+                const dist0 = Math.abs(targetUnits[0].x - gridX) + Math.abs(targetUnits[0].y - gridY);
+                const dist1 = Math.abs(targetUnits[1].x - gridX) + Math.abs(targetUnits[1].y - gridY);
                 if (dist1 < dist0) targetUnitIndex = 1;
             }
             
-            socket.emit('playerAction', { type: 'move', x: gridX, y: gridY, unitIndex: targetUnitIndex });
+            socket.emit('playerAction', { 
+                type: 'move', 
+                x: gridX, 
+                y: gridY, 
+                unitIndex: targetUnitIndex,
+                forcedRole: targetRole 
+            });
         }
-    } else {
-        console.log("Луч пролетел мимо игровых платформ.");
     }
 });
 
