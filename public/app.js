@@ -44,11 +44,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
-// Освещение сцены
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.9); 
+// Настройка правильного военного освещения (тени станут глубже)
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.85); 
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-dirLight.position.set(10, 25, 10);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+dirLight.position.set(15, 30, 10);
 scene.add(dirLight);
 
 // --- СОЗДАНИЕ СЕТОК (РАЗМЕТКА) ---
@@ -126,17 +126,18 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- ПРЕДВАРИТЕЛЬНАЯ ОДНОКРАТНАЯ ЗАГРУЗКА МОДЕЛИ ---
+// --- ПРЕДВАРИТЕЛЬНАЯ ОДНОКРАТНАЯ ЗАГРУЗКА И НАСТРОЙКА РАЗМЕРА ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     
-    // Сразу нормализуем размеры и центрируем мастер-шаблон
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
     const size = new THREE.Vector3();
     box.getSize(size);
     
     const maxDim = Math.max(size.x, size.y, size.z);
-    const targetSize = 0.5; 
+    
+    // СДЕЛАЛИ МОДЕЛИ В 2 РАЗА БОЛЬШЕ (было 0.5, стало 1.0)
+    const targetSize = 1.0; 
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
@@ -146,16 +147,15 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate.position.z = -center.z * scaleFactor;
     sauModelTemplate.position.y = -box.min.y * scaleFactor;
 
-    console.log("Мастер-модель успешно загружена в кэш.");
+    console.log("Военная мастер-модель кэширована в увеличенном масштабе.");
     
-    // Если игра уже стартовала к моменту загрузки файла — принудительно рендерим пушки
     if (gameState) renderUnits();
 }, undefined, (error) => {
     console.error('Критическая ошибка предзагрузки модели:', error);
 });
 
-// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ САУ (БЕЗ МИГАНИЙ) ---
-function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
+// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ ВОЕННЫХ САУ ---
+function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const group = new THREE.Group();
     
     let worldX, worldZ;
@@ -175,18 +175,17 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     scene.add(group);
     visualUnits[id] = group;
 
-    // Цветной маркер под пушкой
-    const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
+    // Цветной маркер команды (синий/красный) остается ТОЛЬКО на земле под техникой
+    const ringGeo = new THREE.RingGeometry(0.38, 0.45, 32);
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
-        color: isDestroyed ? 0x444444 : color, 
+        color: isDestroyed ? 0x222222 : ringColor, 
         side: THREE.DoubleSide 
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.position.y = 0.02; 
     group.add(ring);
 
-    // Если шаблон модели уже в кэше, клонируем его СИНХРОННО (0 миллисекунд задержки)
     if (sauModelTemplate) {
         const model = sauModelTemplate.clone();
         
@@ -196,17 +195,19 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
                 child.receiveShadow = true;
                 
                 if (!isDestroyed) {
+                    // И свои, и чужие танки красятся в одинаковый суровый хаки
                     child.material = new THREE.MeshStandardMaterial({
-                        color: color,
-                        roughness: 0.5,
-                        metalness: 0.2
+                        color: 0x4B5320, // Защитный армейский хаки (Olive Drab / Khaki)
+                        roughness: 0.7,   // Менее глянцевый, матовая броня
+                        metalness: 0.15
                     });
                 } else {
+                    // Уничтоженная техника
                     child.material = new THREE.MeshStandardMaterial({
-                        color: 0x333333,
-                        roughness: 0.9,
+                        color: 0x2b2e18, // Обгоревший темно-зеленый / земляной
+                        roughness: 0.95,
                         transparent: true,
-                        opacity: 0.5
+                        opacity: 0.45
                     });
                 }
             }
@@ -214,11 +215,13 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
         
         group.add(model);
     } else {
-        // Резервный кубик ТОЛЬКО на самый первый кадр загрузки сайта, если интернет совсем плохой
-        const placeholderGeo = new THREE.BoxGeometry(0.4, 0.3, 0.4);
-        const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x222222 : color });
+        // Резервный куб хаки на случай задержки загрузки
+        const placeholderGeo = new THREE.BoxGeometry(0.7, 0.4, 0.7);
+        const placeholderMat = new THREE.MeshStandardMaterial({ 
+            color: isDestroyed ? 0x2b2e18 : 0x4B5320 
+        });
         const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
-        placeholder.position.y = 0.15;
+        placeholder.position.y = 0.2;
         group.add(placeholder);
     }
 }
@@ -265,7 +268,7 @@ function spawnFireAndSmoke() {
         const mat = new THREE.MeshBasicMaterial({ color: randomColor });
         const mesh = new THREE.Mesh(geo, mat);
         
-        mesh.position.set(pos.x + (Math.random() - 0.5) * 0.2, 0.4, pos.z + (Math.random() - 0.5) * 0.2);
+        mesh.position.set(pos.x + (Math.random() - 0.5) * 0.3, 0.4, pos.z + (Math.random() - 0.5) * 0.3);
         scene.add(mesh);
         
         particles.push({
@@ -412,6 +415,7 @@ function renderUnits() {
 
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
+            // Кольцо синее (0x1e90ff), но сама модель внутри будет хаки
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
             
             if (unit.destroyed) {
@@ -428,6 +432,7 @@ function renderUnits() {
 
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
+            // Кольцо красное (0xff4757), но сама модель внутри будет хаки
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2');
             
             if (unit.destroyed) {
