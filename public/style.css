@@ -1,50 +1,28 @@
-body, html {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    font-family: Arial, sans-serif;
-    background-color: #1a1a1a;
-}
-
-#canvas-container {
-    width: 100vw;
-    height: 100vh;
-}
-
-#ui-container {
-    position: absolute;
-    top: 20px;
+#controls {
+    position: fixed;
+    bottom: 20px; /* Фиксированный отступ от нижнего края экрана */
     left: 50%;
     transform: translateX(-50%);
-    text-align: center;
-    color: white;
-    z-index: 10;
-    pointer-events: none; /* Чтобы клики проходили сквозь UI на 3D сцену */
-}
-
-#timer {
-    font-size: 48px;
-    font-weight: bold;
-    color: #ff4757;
-    margin: 10px 0;
-}
-
-#controls {
-    pointer-events: auto; /* Включаем клики для кнопок */
     display: flex;
-    gap: 20px;
+    gap: 15px;
+    z-index: 10; /* Элементы интерфейса всегда поверх 3D сцены */
 }
 
-button {
-    padding: 15px 30px;
+#controls button {
+    padding: 12px 30px;
     font-size: 18px;
     font-weight: bold;
     border: none;
+    border-radius: 8px;
     cursor: pointer;
-    border-radius: 5px;
+    transition: background-color 0.2s, transform 0.1s;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.15);
 }
 
 #btn-fire { background-color: #ff4757; color: white; }
+#btn-fire.active { background-color: #ff1f35; box-shadow: inset 0 3px 5px rgba(0,0,0,0.3); }
+
 #btn-move { background-color: #2ed573; color: white; }
+#btn-move.active { background-color: #26af5f; box-shadow: inset 0 3px 5px rgba(0,0,0,0.3); }
+
 .hidden { display: none !important; }
-.active { background-color: #ffa500 !important; border: 2px solid white; }
