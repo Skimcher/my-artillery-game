@@ -43,7 +43,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
-// Добавим немного интенсивности свету, чтобы модель точно не была черной
+// Мощный свет, чтобы модель не была темной
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.9); 
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -125,7 +125,7 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- ОТОБРАЖЕНИЕ САУ (ИСПРАВЛЕНЫ МАТЕРИАЛЫ И ОТОБРАЖЕНИЕ 3D) ---
+// --- УМНОЕ ОТОБРАЖЕНИЕ САУ ---
 function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -146,7 +146,7 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     scene.add(group);
     visualUnits[id] = group;
 
-    // Отрисовка цветного кольца-маркера на земле (оно останется всегда)
+    // Цветной маркер под пушкой
     const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
@@ -157,42 +157,63 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     ring.position.y = 0.02; 
     group.add(ring);
 
-    // Временный куб-заглушка
+    // Временный кубик
     const placeholderGeo = new THREE.BoxGeometry(0.4, 0.3, 0.4);
     const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x222222 : color });
     const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
     placeholder.position.y = 0.15;
     group.add(placeholder);
 
-    // АСИНХРОННАЯ ЗАГРУЗКА 3D МОДЕЛИ
+    // Загрузка 3D модели с авто-нормализацией размеров
     gltfLoader.load('/models/sau.glb', (gltf) => {
         const model = gltf.scene;
         
+        // Автоматически считаем реальные границы модели, исправляя кривой экспорт
+        const box = new THREE.Box3().setFromObject(model);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const targetSize = 0.5; // Оптимальный размер на клетке
+        const scaleFactor = targetSize / maxDim;
+        model.scale.set(scaleFactor, scaleFactor, scaleFactor);
+        
+        // Центрируем модель по осям X и Z относительно её Pivot Point
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        model.position.x = -center.x * scaleFactor;
+        model.position.z = -center.z * scaleFactor;
+        model.position.y = -box.min.y * scaleFactor; // Ровно на землю
+
+        // Принудительно чиним материалы и настраиваем цвета
         model.traverse((child) => {
             if (child.isMesh) {
                 child.castShadow = true;
                 child.receiveShadow = true;
                 
-                // Если юнит уничтожен — делаем его полупрозрачным черным, не ломая структуру материала
-                if (isDestroyed) {
-                    if (child.material) {
-                        child.material.transparent = true;
-                        child.material.opacity = 0.4;
-                    }
+                if (!isDestroyed) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: color,
+                        roughness: 0.5,
+                        metalness: 0.2
+                    });
+                } else {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x333333,
+                        roughness: 0.9,
+                        transparent: true,
+                        opacity: 0.5
+                    });
                 }
             }
         });
-
-        // Корректируем масштаб (если модель слишком маленькая или большая, можно поменять этот параметр)
-        model.scale.set(0.4, 0.4, 0.4);
-        model.position.set(0, 0, 0);
         
-        // УДАЛЯЕМ КУБ ТОЛЬКО ПОСЛЕ УСПЕШНОЙ ПОДГРУЗКИ МОДЕЛИ
+        // Подмена кубика на готовую пушку
         group.remove(placeholder);
         group.add(model);
 
     }, undefined, (error) => {
-        console.error('Ошибка загрузки 3D модели:', error);
+        console.error('Ошибка обработки модели:', error);
     });
 }
 
