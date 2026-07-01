@@ -1,28 +1,116 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #F5F2EB;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Контейнер Three.js на весь экран под интерфейсом */
+#canvas-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* Верхняя плашка с инфой */
+#ui-header {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.95);
+    padding: 15px 30px;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    z-index: 10;
+    min-width: 280px;
+}
+
+#turn-indicator {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    margin-bottom: 5px;
+    color: #2f3542;
+}
+
+#timer-container {
+    font-size: 14px;
+    color: #747d8c;
+    font-weight: 600;
+}
+
+#timer {
+    font-size: 16px;
+    font-weight: 700;
+    color: #2f3542;
+}
+
+/* Контейнер кнопок строго внизу экрана */
 #controls {
     position: fixed;
-    bottom: 20px; /* Фиксированный отступ от нижнего края экрана */
+    bottom: 25px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 15px;
-    z-index: 10; /* Элементы интерфейса всегда поверх 3D сцены */
+    gap: 20px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.3);
+    padding: 10px;
+    border-radius: 12px;
+    backdrop-filter: blur(5px);
 }
 
+/* Стиль кнопок */
 #controls button {
-    padding: 12px 30px;
+    padding: 14px 40px;
     font-size: 18px;
-    font-weight: bold;
+    font-weight: 800;
+    letter-spacing: 1px;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     cursor: pointer;
-    transition: background-color 0.2s, transform 0.1s;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+    color: white;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
 }
 
-#btn-fire { background-color: #ff4757; color: white; }
-#btn-fire.active { background-color: #ff1f35; box-shadow: inset 0 3px 5px rgba(0,0,0,0.3); }
+#controls button:active {
+    transform: scale(0.95);
+}
 
-#btn-move { background-color: #2ed573; color: white; }
-#btn-move.active { background-color: #26af5f; box-shadow: inset 0 3px 5px rgba(0,0,0,0.3); }
+#btn-fire {
+    background-color: #ff4757;
+    opacity: 0.6;
+}
+#btn-fire.active {
+    background-color: #ff1f35;
+    opacity: 1;
+    box-shadow: 0 0 15px rgba(255, 31, 53, 0.4);
+}
 
-.hidden { display: none !important; }
+#btn-move {
+    background-color: #2ed573;
+    opacity: 0.6;
+}
+#btn-move.active {
+    background-color: #26af5f;
+    opacity: 1;
+    box-shadow: 0 0 15px rgba(38, 175, 95, 0.4);
+}
+
+.hidden {
+    display: none !important;
+}
