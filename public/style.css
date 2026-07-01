@@ -13,7 +13,7 @@ body, html {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* Контейнер Three.js на весь экран под интерфейсом */
+/* Контейнер Three.js на весь экран */
 #canvas-container {
     position: absolute;
     top: 0;
@@ -23,7 +23,7 @@ body, html {
     z-index: 1;
 }
 
-/* Верхняя плашка с инфой */
+/* Верхняя плашка с ходом и таймером */
 #ui-header {
     position: fixed;
     top: 20px;
@@ -58,32 +58,33 @@ body, html {
     color: #2f3542;
 }
 
-/* Контейнер кнопок строго внизу экрана */
+/* Контейнер кнопок: расположен ровно по центру экрана между полями */
 #controls {
     position: fixed;
-    bottom: 25px;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     display: flex;
     gap: 20px;
     z-index: 10;
-    background: rgba(255, 255, 255, 0.3);
-    padding: 10px;
+    background: rgba(255, 255, 255, 0.4);
+    padding: 8px 12px;
     border-radius: 12px;
-    backdrop-filter: blur(5px);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 /* Стиль кнопок */
 #controls button {
-    padding: 14px 40px;
-    font-size: 18px;
+    padding: 10px 30px;
+    font-size: 16px;
     font-weight: 800;
     letter-spacing: 1px;
     border: none;
-    border-radius: 10px;
+    border-radius: 8px;
     cursor: pointer;
     color: white;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
     transition: all 0.2s ease;
 }
 
