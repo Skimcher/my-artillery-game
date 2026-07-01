@@ -10,8 +10,16 @@ const visualUnits = {};
 const particles = []; 
 const burningUnitsPositions = []; 
 
-// Инициализируем загрузчик 3D моделей
 const gltfLoader = new THREE.GLTFLoader();
+
+// --- ПРОВЕРКА НА МОБИЛЬНОЕ УСТРОЙСТВО ---
+function isMobileDevice() {
+    // Проверяем как по ширине экрана, так и по userAgent
+    return (window.innerWidth < window.innerHeight) || 
+           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+}
+
+let isMobile = isMobileDevice();
 
 // --- НАСТРОЙКА THREE.JS ---
 const container = document.getElementById('canvas-container');
@@ -19,11 +27,25 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xF5F2EB);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 12, 14); 
-camera.lookAt(0, 1, 0);
+
+// Настраиваем положение камеры в зависимости от экрана
+function updateCameraPosition() {
+    if (isMobile) {
+        // На смартфоне смотрим почти вертикально сверху, чтобы видеть верхнее и нижнее поле
+        camera.position.set(0, 18, 11); 
+        camera.lookAt(0, 0, 0);
+    } else {
+        // На ПК смотрим сбоку под привычным углом
+        camera.position.set(0, 12, 14); 
+        camera.lookAt(0, 1, 0);
+    }
+}
+updateCameraPosition();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+// Оптимизация для мобильных ретина-дисплеев (чтобы игра не тормозила из-за овер-разрешения)
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.75); 
@@ -32,26 +54,34 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-// Нейтральные серые сетки (без цветных крестов)
+// --- СОЗДАНИЕ СЕТОК (РАЗМЕТКА) ---
 const gridHelperLeft = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
-gridHelperLeft.position.set(-5, 0.06, 0);
-scene.add(gridHelperLeft);
-
 const gridHelperRight = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
-gridHelperRight.position.set(5, 0.06, 0);
-scene.add(gridHelperRight);
 
-const clickableCells = [];
+function positionGridHelpers() {
+    if (isMobile) {
+        // Смартфон: левое поле идет вниз (ближе к игроку), правое — вверх (к врагу)
+        gridHelperLeft.position.set(0, 0.06, 5);
+        gridHelperRight.position.set(0, 0.06, -5);
+    } else {
+        // ПК: классическое размещение слева и справа
+        gridHelperLeft.position.set(-5, 0.06, 0);
+        gridHelperRight.position.set(5, 0.06, 0);
+    }
+}
+scene.add(gridHelperLeft);
+scene.add(gridHelperRight);
+positionGridHelpers();
+
+let clickableCells = [];
 
 function createDirtTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
-
     ctx.fillStyle = '#5c4033';
     ctx.fillRect(0, 0, 128, 128);
-
     for (let i = 0; i < 800; i++) {
         const x = Math.random() * 128;
         const y = Math.random() * 128;
@@ -59,7 +89,6 @@ function createDirtTexture() {
         ctx.fillStyle = Math.random() > 0.5 ? '#4a3329' : '#6e4e3f';
         ctx.fillRect(x, y, size, size);
     }
-
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -68,58 +97,77 @@ function createDirtTexture() {
 
 const dirtTexture = createDirtTexture();
 
-function createGridPlatform(offsetX, isEnemy) {
+function createGridPlatforms() {
+    // Очищаем старые ячейки перед перегенерацией (при ресайзе)
+    clickableCells.forEach(cell => scene.remove(cell));
+    clickableCells = [];
+
     const size = 1; 
     for (let x = 0; x < 8; x++) {
         for (let z = 0; z < 8; z++) {
-            const geometry = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
-            const material = new THREE.MeshStandardMaterial({ 
-                map: dirtTexture,
-                color: isEnemy ? 0xcccccc : 0xffffff, 
-                roughness: 0.9 
-            });
-            const cell = new THREE.Mesh(geometry, material);
-            cell.position.set(x - 3.5 + offsetX, 0, z - 3.5);
+            // Платформа 1 (Игрок 1 / Своё поле)
+            const geo1 = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
+            const mat1 = new THREE.MeshStandardMaterial({ map: dirtTexture, color: 0xffffff, roughness: 0.9 });
+            const cell1 = new THREE.Mesh(geo1, mat1);
             
-            cell.userData = { gridX: x, gridY: z, isEnemy: isEnemy };
-            scene.add(cell);
-            clickableCells.push(cell); 
+            // Платформа 2 (Игрок 2 / Вражеское поле)
+            const geo2 = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
+            const mat2 = new THREE.MeshStandardMaterial({ map: dirtTexture, color: 0xcccccc, roughness: 0.9 });
+            const cell2 = new THREE.Mesh(geo2, mat2);
+
+            if (isMobile) {
+                // На мобилке: p1 снизу, p2 сверху
+                cell1.position.set(x - 3.5, 0, z - 3.5 + 5);
+                cell2.position.set(x - 3.5, 0, z - 3.5 - 5);
+            } else {
+                // На ПК: p1 слева, p2 справа
+                cell1.position.set(x - 3.5 - 5, 0, z - 3.5);
+                cell2.position.set(x - 3.5 + 5, 0, z - 3.5);
+            }
+
+            cell1.userData = { gridX: x, gridY: z, isEnemy: false };
+            cell2.userData = { gridX: x, gridY: z, isEnemy: true };
+
+            scene.add(cell1);
+            scene.add(cell2);
+            clickableCells.push(cell1, cell2);
         }
     }
 }
+createGridPlatforms();
 
-createGridPlatform(-5, false); 
-createGridPlatform(5, true);   
-
-// --- ЗАГРУЗКА РЕАЛИСТИЧНОЙ МОДЕЛИ САУ ---
-function createVisualUnit(id, x, z, color, isDestroyed, owner) {
-    // Создаем пустой контейнер, который сразу встает в нужную точку сетки
+// --- ОТОБРАЖЕНИЕ САУ ---
+function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     const group = new THREE.Group();
-    group.position.set(x, 0, z);
     
-    // Поворачиваем САУ к центру карты (на поле противника)
-    // Если при первом тесте окажется, что модель из Tripo3D развернута задом или боком,
-    // мы просто скорректируем эти углы (например, поменяем знак или прибавим Math.PI)
-    if (owner === 'p1') {
-        group.rotation.y = Math.PI / 2;  // Синие (левые) смотрят направо
+    // Рассчитываем мировые координаты в зависимости от экрана
+    let worldX, worldZ;
+    if (isMobile) {
+        const offsetZ = (owner === 'p1') ? 5 : -5;
+        worldX = gridX - 3.5;
+        worldZ = gridY - 3.5 + offsetZ;
+        
+        // Разворот дула на мобилке: p1 (снизу) смотрит вверх (вдоль оси -Z), p2 (сверху) смотрит вниз (+Z)
+        group.rotation.y = (owner === 'p1') ? Math.PI : 0;
     } else {
-        group.rotation.y = -Math.PI / 2; // Красные (правые) смотрят налево
+        const offsetX = (owner === 'p1') ? -5 : 5;
+        worldX = gridX - 3.5 + offsetX;
+        worldZ = gridY - 3.5;
+        
+        // Разворот на ПК: налево или направо
+        group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
     }
 
+    group.position.set(worldX, 0, worldZ);
     scene.add(group);
     visualUnits[id] = group;
 
-    // Асинхронно загружаем .glb файл САУ
     gltfLoader.load('/models/sau.glb', (gltf) => {
         const model = gltf.scene;
-
-        // Настройка PBR-материалов, сгенерированных нейросетью
         model.traverse((child) => {
             if (child.isMesh) {
                 child.castShadow = true;
                 child.receiveShadow = true;
-
-                // Эффект уничтожения: если САУ подбита, делаем текстуру темной (обгоревшей сажей)
                 if (isDestroyed) {
                     child.material.color.setHex(0x222222);
                     child.material.roughness = 0.9; 
@@ -127,15 +175,11 @@ function createVisualUnit(id, x, z, color, isDestroyed, owner) {
             }
         });
 
-        // Масштабирование: сжимаем модель под размеры нашей игровой ячейки (1x1 метр)
-        // Если САУ покажется слишком большой или маленькой, измени эти три значения
         model.scale.set(0.4, 0.4, 0.4);
         model.position.set(0, 0, 0);
-
-        // Добавляем готовую 3D-модель в наш контейнер на сцене
         group.add(model);
 
-        // Цветной круг-маркер под САУ на земле, чтобы игроки четко понимали команды (Синие/Красные)
+        // Кольцо-индикатор под САУ
         const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
         ringGeo.rotateX(-Math.PI / 2); 
         const ringMat = new THREE.MeshBasicMaterial({ 
@@ -147,13 +191,24 @@ function createVisualUnit(id, x, z, color, isDestroyed, owner) {
         group.add(ring);
 
     }, undefined, (error) => {
-        console.error('Ошибка при загрузке 3D модели САУ:', error);
+        console.error('Ошибка загрузки модели САУ:', error);
     });
 }
 
-function createSplash(worldX, worldZ, type) {
+function createSplash(gridX, gridY, targetRole, type) {
     const color = (type === 'hit') ? 0xffa500 : 0x5c4033; 
     const particleCount = 15;
+
+    let worldX, worldZ;
+    if (isMobile) {
+        const offsetZ = (targetRole === 'p1') ? 5 : -5;
+        worldX = gridX - 3.5;
+        worldZ = gridY - 3.5 + offsetZ;
+    } else {
+        const offsetX = (targetRole === 'p1') ? -5 : 5;
+        worldX = gridX - 3.5 + offsetX;
+        worldZ = gridY - 3.5;
+    }
 
     for (let i = 0; i < particleCount; i++) {
         const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
@@ -216,10 +271,9 @@ btnMove.addEventListener('click', (e) => {
     btnFire.classList.remove('active');
 });
 
-// --- ОБРАБОТКА КЛИКОВ ---
+// --- ОБРАБОТКА КЛИКОВ (ТАПОВ) ---
 window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
-
     if (!gameState) return;
 
     const raycaster = new THREE.Raycaster();
@@ -277,7 +331,6 @@ window.addEventListener('click', (event) => {
 
 // --- СЕТЕВАЯ ЛОГИКА ---
 socket.emit('joinGame');
-
 socket.on('waiting', (msg) => { turnIndicator.innerText = msg; });
 
 socket.on('gameStart', (data) => {
@@ -304,11 +357,7 @@ socket.on('gameStateUpdate', (newState) => {
 });
 
 socket.on('fireResult', (data) => {
-    const offset = data.targetRole === 'p2' ? 5 : -5;
-    const worldX = data.x - 3.5 + offset;
-    const worldZ = data.y - 3.5;
-
-    createSplash(worldX, worldZ, data.result);
+    createSplash(data.x, data.y, data.targetRole, data.result);
 });
 
 socket.on('gameOver', (data) => {
@@ -327,37 +376,48 @@ function updateTurnUI() {
 }
 
 function renderUnits() {
-    // Удаляем предыдущие модели со сцены
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     burningUnitsPositions.length = 0; 
     
     const p1 = gameState.players.p1;
     const p2 = gameState.players.p2;
-    const p1Offset = -5;
-    const p2Offset = 5;
 
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
-            const worldX = unit.x - 3.5 + p1Offset;
-            const worldZ = unit.y - 3.5;
-            createVisualUnit(`p1_${index}`, worldX, worldZ, 0x1e90ff, unit.destroyed, 'p1');
-            if (unit.destroyed) burningUnitsPositions.push({ x: worldX, z: worldZ });
+            createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
+            
+            // Сохраняем координаты огня подбитых юнитов
+            if (unit.destroyed) {
+                let worldX, worldZ;
+                if (isMobile) {
+                    worldX = unit.x - 3.5; worldZ = unit.y - 3.5 + 5;
+                } else {
+                    worldX = unit.x - 3.5 - 5; worldZ = unit.y - 3.5;
+                }
+                burningUnitsPositions.push({ x: worldX, z: worldZ });
+            }
         });
     }
 
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
-            const worldX = unit.x - 3.5 + p2Offset;
-            const worldZ = unit.y - 3.5;
-            createVisualUnit(`p2_${index}`, worldX, worldZ, 0xff4757, unit.destroyed, 'p2');
-            if (unit.destroyed) burningUnitsPositions.push({ x: worldX, z: worldZ });
+            createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2');
+            
+            if (unit.destroyed) {
+                let worldX, worldZ;
+                if (isMobile) {
+                    worldX = unit.x - 3.5; worldZ = unit.y - 3.5 - 5;
+                } else {
+                    worldX = unit.x - 3.5 + 5; worldZ = unit.y - 3.5;
+                }
+                burningUnitsPositions.push({ x: worldX, z: worldZ });
+            }
         });
     }
 }
 
 function animate() {
     requestAnimationFrame(animate);
-
     spawnFireAndSmoke();
 
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -365,22 +425,32 @@ function animate() {
         p.mesh.position.x += p.vX;
         p.mesh.position.y += p.vY;
         p.mesh.position.z += p.vZ;
-
         p.vY -= 0.003; 
         p.life--;
-
         if (p.life <= 0) {
             scene.remove(p.mesh);
             particles.splice(i, 1);
         }
     }
-
     renderer.render(scene, camera);
 }
 animate();
 
+// --- АДАПТИВНОСТЬ ПРИ ИЗМЕНЕНИИ ЭКРАНА / ПОВОРОТЕ ТЕЛЕФОНА ---
 window.addEventListener('resize', () => {
+    // Перепроверяем тип устройства (например, если перевернули планшет)
+    const currentMobileState = isMobileDevice();
+    if (currentMobileState !== isMobile) {
+        isMobile = currentMobileState;
+        positionGridHelpers();
+        createGridPlatforms();
+        if (gameState) renderUnits();
+    }
+    
+    updateCameraPosition();
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 });
