@@ -124,7 +124,7 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- ОТОБРАЖЕНИЕ САУ (С ЗАЩИТОЙ ОТ ПУСТОГО ЭКРАНА) ---
+// --- ОТОБРАЖЕНИЕ САУ (ИСПРАВЛЕНО!) ---
 function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -145,18 +145,18 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     scene.add(group);
     visualUnits[id] = group;
 
-    // 1. ОТРИСОВКА МАРКЕРА И ЗАГЛУШКИ (Появятся МГНОВЕННО)
+    // 1. ОТРИСОВКА МАРКЕРА И ЗАГЛУШКИ (Теперь без синтаксических ошибок, появятся мгновенно)
     const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
         color: isDestroyed ? 0x444444 : color, 
         side: THREE.DoubleSide 
-        // На мобилках приподнимем кольцо чуть выше, чтобы не мерцало поверх земли
     });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.position.y = 0.02; 
     group.add(ring);
 
-    // Временный куб, чтобы поле не пустовало, пока грузится тяжелый .glb файл
+    // Временный куб, чтобы поле гарантированно не пустовало
     const placeholderGeo = new THREE.BoxGeometry(0.4, 0.3, 0.4);
     const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x222222 : color });
     const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
@@ -180,12 +180,12 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
         model.scale.set(0.4, 0.4, 0.4);
         model.position.set(0, 0, 0);
         
-        // Модель успешно загрузилась! Удаляем куб-заглушку и ставим САУ
+        // Удаляем временный куб и ставим модель САУ
         group.remove(placeholder);
         group.add(model);
 
     }, undefined, (error) => {
-        console.error('Ошибка загрузки /models/sau.glb. Проверьте регистр букв названия файла на GitHub!', error);
+        console.error('Ошибка загрузки /models/sau.glb:', error);
     });
 }
 
@@ -306,7 +306,7 @@ window.addEventListener('click', (event) => {
             let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
             if (aliveUnits.length > 1) {
                 const dist0 = Math.abs(aliveUnits[0].x - gridX) + Math.abs(aliveUnits[0].y - gridY);
-                const dist1 = Math.abs(aliveUnits[1].x - gridX) + Math.abs(aliveUnits[1].y - gridY);
+                const dist1 = Math.abs(aliveUnits[1].length === 0 ? 0 : aliveUnits[1].x - gridX) + Math.abs(aliveUnits[1].y - gridY);
                 if (dist1 < dist0) {
                     targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[1]);
                 }
@@ -429,7 +429,6 @@ function animate() {
 }
 animate();
 
-// --- АДАПТИВНОСТЬ И СМЕНА РЕЖИМОВ ЭКРАНА ---
 window.addEventListener('resize', () => {
     const currentMobileState = isMobileDevice();
     if (currentMobileState !== isMobile) {
