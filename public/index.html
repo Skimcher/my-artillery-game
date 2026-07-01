@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- Этот тег критически важен, чтобы кнопки и меню на смартфонах не сжимались и оставались большими -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Artillery Duel 3D</title>
     <link rel="stylesheet" href="style.css">
@@ -11,19 +12,19 @@
     <!-- Контейнер для 3D графики (Three.js) -->
     <div id="canvas-container"></div>
 
-    <!-- Верхняя панель состояния -->
+    <!-- Верхняя плашка состояния (Ход и Таймер) -->
     <div id="ui-header">
         <div id="turn-indicator">Waiting for opponent...</div>
         <div id="timer-container">Time: <span id="timer">30</span> sec</div>
     </div>
 
-    <!-- Нижняя панель управления (Кнопки) -->
+    <!-- Большие кнопки управления строго между полями боя -->
     <div id="controls" class="hidden">
         <button id="btn-fire" class="active">FIRE</button>
         <button id="btn-move">MOVE</button>
     </div>
 
-    <!-- Подключение библиотек и основного скрипта -->
+    <!-- Подключение Socket.io, Three.js, загрузчика моделей и логики игры -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
