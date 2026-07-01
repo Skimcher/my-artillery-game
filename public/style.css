@@ -1,160 +1,45 @@
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    user-select: none;
-}
-
-body, html {
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background-color: #F5F2EB;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-/* Контейнер Three.js на весь экран */
-#canvas-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
-}
-
-/* Верхняя плашка с ходом и таймером (ПК-версия) */
-#ui-header {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(255, 255, 255, 0.95);
-    padding: 15px 30px;
-    border-radius: 16px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-    text-align: center;
-    z-index: 10;
-    min-width: 280px;
-}
-
-#turn-indicator {
-    font-size: 22px;
-    font-weight: 800;
-    letter-spacing: 1px;
-    margin-bottom: 5px;
-    color: #2f3542;
-}
-
-#timer-container {
-    font-size: 14px;
-    color: #747d8c;
-    font-weight: 600;
-}
-
-#timer {
-    font-size: 16px;
-    font-weight: 700;
-    color: #2f3542;
-}
-
-/* Контейнер кнопок по центру экрана (ПК-версия) */
-#controls {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    gap: 20px;
-    z-index: 10;
-    background: rgba(255, 255, 255, 0.4);
-    padding: 8px 12px;
-    border-radius: 12px;
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-/* Стиль кнопок (ПК-версия) */
-#controls button {
-    padding: 10px 30px;
-    font-size: 16px;
-    font-weight: 800;
-    letter-spacing: 1px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    color: white;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-    transition: all 0.2s ease;
-}
-
-#controls button:active {
-    transform: scale(0.95);
-}
-
-#btn-fire {
-    background-color: #ff4757;
-    opacity: 0.6;
-}
-#btn-fire.active {
-    background-color: #ff1f35;
-    opacity: 1;
-    box-shadow: 0 0 15px rgba(255, 31, 53, 0.4);
-}
-
-#btn-move {
-    background-color: #2ed573;
-    opacity: 0.6;
-}
-#btn-move.active {
-    background-color: #26af5f;
-    opacity: 1;
-    box-shadow: 0 0 15px rgba(38, 175, 95, 0.4);
-}
-
-.hidden {
-    display: none !important;
-}
-
-
 /* ==========================================================================
-   МОБИЛЬНАЯ ВЕРСИЯ (СМАРТФОНЫ И ПЛАНШЕТЫ)
+   МОБИЛЬНАЯ ВЕРСИЯ (СМАРТФОНЫ И ПЛАНШЕТЫ) — МАКСИМАЛЬНОЕ УВЕЛИЧЕНИЕ
    ========================================================================== */
 @media (max-width: 768px) {
     
-    /* Верхнее меню увеличили в 2.5 раза */
+    /* Верхнее меню (OPPONENT'S TURN / TIME) */
     #ui-header {
-        top: 30px;
-        padding: 30px 50px;
-        border-radius: 24px;
-        min-width: 85%; /* Чтобы плашка красиво смотрелась на узком экране */
+        top: 5%;
+        padding: 40px 60px !important;
+        border-radius: 32px !important;
+        min-width: 90% !important;
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2) !important;
     }
 
     #turn-indicator {
-        font-size: 48px; /* Было 22px -> увеличили ~ в 2.2-2.5 раза */
-        margin-bottom: 12px;
+        font-size: 64px !important; /* Экстремально крупный шрифт для статуса хода */
+        margin-bottom: 20px !important;
+        line-height: 1.2 !important;
     }
 
     #timer-container {
-        font-size: 32px; /* Было 14px -> увеличили в 2.3 раза */
+        font-size: 44px !important; /* Очень крупный текст таймера */
     }
 
     #timer {
-        font-size: 36px;
+        font-size: 52px !important;
     }
 
-    /* Адаптация контейнера кнопок под пальцы */
+    /* Контейнер кнопок по центру экрана */
     #controls {
-        gap: 30px;
-        padding: 14px 20px;
-        border-radius: 20px;
+        gap: 40px !important;
+        padding: 24px 36px !important;
+        border-radius: 32px !important;
+        background: rgba(255, 255, 255, 0.6) !important; /* Чуть плотнее подложка */
     }
 
-    /* Кнопки увеличили ровно в 2 раза */
+    /* Кнопки FIRE и MOVE теперь гигантские */
     #controls button {
-        padding: 20px 60px; /* Удвоили внутренние отступы */
-        font-size: 32px;    /* Было 16px -> стало в 2 раза больше */
-        border-radius: 16px;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+        padding: 35px 90px !important; /* Огромная область для нажатия пальцем */
+        font-size: 56px !important;    /* Шрифт увеличен более чем в 3 раза от ПК версии */
+        border-radius: 24px !important;
+        letter-spacing: 2px !important;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3) !important;
     }
 }
