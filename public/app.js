@@ -44,7 +44,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
-// Настройка правильного военного освещения (тени станут глубже)
+// Настройка правильного военного освещения
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.85); 
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -126,35 +126,43 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- ПРЕДВАРИТЕЛЬНАЯ ОДНОКРАТНАЯ ЗАГРУЗКА И НАСТРОЙКА РАЗМЕРА ---
+// --- ИДЕАЛЬНОЕ ЦЕНТРИРОВАНИЕ ГЕОМЕТРИИ МОДЕЛИ ОДИН РАЗ ПРИ ЗАГРУЗКЕ ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     
+    // Сначала принудительно сбрасываем локальные позиции мешей, центрируя их геометрию внутренне
+    sauModelTemplate.traverse((child) => {
+        if (child.isMesh && child.geometry) {
+            child.geometry.center(); // Сдвигает Pivot Point геометрии строго в её центр!
+        }
+    });
+
+    // Теперь измеряем чистые габариты получившейся отцентрированной модели
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
     const size = new THREE.Vector3();
     box.getSize(size);
     
     const maxDim = Math.max(size.x, size.y, size.z);
     
-    // ЕЩЕ В 2 РАЗА БОЛЬШЕ (теперь целевой размер 2.0)
+    // Наш увеличенный гигантский размер
     const targetSize = 2.0; 
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    sauModelTemplate.position.x = -center.x * scaleFactor;
-    sauModelTemplate.position.z = -center.z * scaleFactor;
-    sauModelTemplate.position.y = -box.min.y * scaleFactor;
+    // Обнуляем позиции шаблона. Теперь модель гарантированно вращается вокруг своей оси симметрии!
+    sauModelTemplate.position.set(0, 0, 0);
 
-    console.log("Военная мастер-модель кэширована в гигантском масштабе.");
-    
+    // Приподнимем её чуть-чуть, чтобы гусеницы стояли ровно на земле, зная высоту
+    const updatedBox = new THREE.Box3().setFromObject(sauModelTemplate);
+    sauModelTemplate.position.y = -updatedBox.min.y;
+
+    console.log("Мастер-модель с идеальным центром закеширована.");
     if (gameState) renderUnits();
 }, undefined, (error) => {
     console.error('Критическая ошибка предзагрузки модели:', error);
 });
 
-// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ ВОЕННЫХ САУ ---
+// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ ВОЕННЫХ САУ СТРОГО ПО ЦЕНТРУ ЯЧЕЕК ---
 function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -168,6 +176,7 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
         const offsetX = (owner === 'p1') ? -5 : 5;
         worldX = gridX - 3.5 + offsetX;
         worldZ = gridY - 3.5;
+        // Поворот теперь будет работать идеально, так как ось вращения строго по центру танка
         group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
     }
 
@@ -175,7 +184,7 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     scene.add(group);
     visualUnits[id] = group;
 
-    // Цветной маркер команды (синий/красный) остается ТОЛЬКО на земле под техникой
+    // Цветной маркер команды на земле
     const ringGeo = new THREE.RingGeometry(0.38, 0.45, 32);
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
@@ -195,16 +204,14 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
                 child.receiveShadow = true;
                 
                 if (!isDestroyed) {
-                    // И свои, и чужие танки красятся в одинаковый суровый хаки
                     child.material = new THREE.MeshStandardMaterial({
-                        color: 0x4B5320, // Защитный армейский хаки (Olive Drab / Khaki)
-                        roughness: 0.7,   // Менее глянцевый, матовая броня
+                        color: 0x4B5320, // Хаки брони
+                        roughness: 0.7,   
                         metalness: 0.15
                     });
                 } else {
-                    // Уничтоженная техника
                     child.material = new THREE.MeshStandardMaterial({
-                        color: 0x2b2e18, // Обгоревший темно-зеленый / земляной
+                        color: 0x2b2e18, 
                         roughness: 0.95,
                         transparent: true,
                         opacity: 0.45
@@ -215,7 +222,6 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
         
         group.add(model);
     } else {
-        // Резервный куб хаки на случай задержки загрузки
         const placeholderGeo = new THREE.BoxGeometry(0.7, 0.4, 0.7);
         const placeholderMat = new THREE.MeshStandardMaterial({ 
             color: isDestroyed ? 0x2b2e18 : 0x4B5320 
