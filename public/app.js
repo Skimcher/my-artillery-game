@@ -14,14 +14,6 @@ const gltfLoader = new THREE.GLTFLoader();
 let sauModelTemplate = null; // Шаблон модели в памяти
 let sauCenterOffset = new THREE.Vector3(); // Запоминаем сдвиг центра для точного позиционирования
 
-// --- ПРОВЕРКА НА МОБИЛЬНОЕ УСТРОЙСТВО ---
-function isMobileDevice() {
-    return (window.innerWidth < window.innerHeight) || 
-           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
-}
-
-let isMobile = isMobileDevice();
-
 // --- НАСТРОЙКА THREE.JS ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
@@ -29,14 +21,10 @@ scene.background = new THREE.Color(0xF5F2EB);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 
+// Камера теперь всегда смотрит на вертикально расположенные поля
 function updateCameraPosition() {
-    if (isMobile) {
-        camera.position.set(0, 18, 11); 
-        camera.lookAt(0, 0, 0);
-    } else {
-        camera.position.set(0, 12, 14); 
-        camera.lookAt(0, 1, 0);
-    }
+    camera.position.set(0, 18, 11); 
+    camera.lookAt(0, 0, 0);
 }
 updateCameraPosition();
 
@@ -56,13 +44,9 @@ const gridHelperLeft = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
 const gridHelperRight = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
 
 function positionGridHelpers() {
-    if (isMobile) {
-        gridHelperLeft.position.set(0, 0.06, 5);
-        gridHelperRight.position.set(0, 0.06, -5);
-    } else {
-        gridHelperLeft.position.set(-5, 0.06, 0);
-        gridHelperRight.position.set(5, 0.06, 0);
-    }
+    // Размещение полей по вертикали: ближнее (снизу) и дальнее (сверху)
+    gridHelperLeft.position.set(0, 0.06, 5);
+    gridHelperRight.position.set(0, 0.06, -5);
 }
 scene.add(gridHelperLeft);
 scene.add(gridHelperRight);
@@ -107,13 +91,9 @@ function createGridPlatforms() {
             const mat2 = new THREE.MeshStandardMaterial({ map: dirtTexture, color: 0xcccccc, roughness: 0.9 });
             const cell2 = new THREE.Mesh(geo2, mat2);
 
-            if (isMobile) {
-                cell1.position.set(x - 3.5, 0, z - 3.5 + 5);
-                cell2.position.set(x - 3.5, 0, z - 3.5 - 5);
-            } else {
-                cell1.position.set(x - 3.5 - 5, 0, z - 3.5);
-                cell2.position.set(x - 3.5 + 5, 0, z - 3.5);
-            }
+            // Позиционируем ячейки строго по оси Z (ближнее и дальнее поля)
+            cell1.position.set(x - 3.5, 0, z - 3.5 + 5);
+            cell2.position.set(x - 3.5, 0, z - 3.5 - 5);
 
             cell1.userData = { gridX: x, gridY: z, isEnemy: false };
             cell2.userData = { gridX: x, gridY: z, isEnemy: true };
@@ -126,7 +106,7 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- НАСТРОЙКА МАСШТАБА (-25%) И ВЫЧИСЛЕНИЕ ЦЕНТРА ---
+// --- НАСТРОЙКА МАСШТАБА И ВЫЧИСЛЕНИЕ ЦЕНТРА ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     
@@ -139,43 +119,30 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
-    // Вычисляем отклонение центра от нуля
     const center = new THREE.Vector3();
     box.getCenter(center);
     
-    // Запоминаем точный вектор локального сдвига
     sauCenterOffset.x = -center.x * scaleFactor;
     sauCenterOffset.z = -center.z * scaleFactor;
     sauCenterOffset.y = -box.min.y * scaleFactor;
 
-    console.log("Модель загружена. Центрирование готово:", sauCenterOffset);
+    console.log("Модель загружена. Локальный центр выровнен.");
     if (gameState) renderUnits();
 }, undefined, (error) => {
     console.error('Критическая ошибка предзагрузки модели:', error);
 });
 
-// --- ОТОБРАЖЕНИЕ С РАЗВОРOТОМ ДУЛА НА ПРОТИВНИКА ---
+// --- ОТОБРАЖЕНИЕ С РОТАЦИЕЙ ДРУГ НА ДРУГА (ВВЕРХ / ВНИЗ) ---
 function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const group = new THREE.Group();
     
-    let worldX, worldZ;
-    if (isMobile) {
-        const offsetZ = (owner === 'p1') ? 5 : -5;
-        worldX = gridX - 3.5;
-        worldZ = gridY - 3.5 + offsetZ;
-        
-        // На мобилках: p1 смотрит вверх (на поле p2), p2 смотрит вниз (на поле p1)
-        group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
-    } else {
-        const offsetX = (owner === 'p1') ? -5 : 5;
-        worldX = gridX - 3.5 + offsetX;
-        worldZ = gridY - 3.5;
-        
-        // На десктопе: левый игрок (p1) смотрит направо (0), правый игрок (p2) смотрит налево (PI)
-        group.rotation.y = (owner === 'p1') ? 0 : Math.PI;
-    }
+    const offsetZ = (owner === 'p1') ? 5 : -5;
+    const worldX = gridX - 3.5;
+    const worldZ = gridY - 3.5 + offsetZ;
+    
+    // p1 (снизу) смотрит вперед/вверх на врага. p2 (сверху) смотрит назад/вниз.
+    group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
 
-    // Базовая точка группы ставится ровно в центр клетки
     group.position.set(worldX, 0, worldZ);
     scene.add(group);
     visualUnits[id] = group;
@@ -194,7 +161,7 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     if (sauModelTemplate) {
         const model = sauModelTemplate.clone();
         
-        // Идеальное локальное центрирование. Теперь модель вращается строго вокруг своей оси!
+        // Модель центрируется локально и вращается строго по центру клетки
         model.position.set(sauCenterOffset.x, sauCenterOffset.y, sauCenterOffset.z);
         
         model.traverse((child) => {
@@ -235,16 +202,9 @@ function createSplash(gridX, gridY, targetRole, type) {
     const color = (type === 'hit') ? 0xffa500 : 0x5c4033; 
     const particleCount = 15;
 
-    let worldX, worldZ;
-    if (isMobile) {
-        const offsetZ = (targetRole === 'p1') ? 5 : -5;
-        worldX = gridX - 3.5;
-        worldZ = gridY - 3.5 + offsetZ;
-    } else {
-        const offsetX = (targetRole === 'p1') ? -5 : 5;
-        worldX = gridX - 3.5 + offsetX;
-        worldZ = gridY - 3.5;
-    }
+    const offsetZ = (targetRole === 'p1') ? 5 : -5;
+    const worldX = gridX - 3.5;
+    const worldZ = gridY - 3.5 + offsetZ;
 
     for (let i = 0; i < particleCount; i++) {
         const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
@@ -307,7 +267,7 @@ btnMove.addEventListener('click', (e) => {
     btnFire.classList.remove('active');
 });
 
-// --- ОБРАБОТКА КЛИКОВ (ТАПОВ) ---
+// --- ОБРАБОТКА КЛИКОВ ---
 window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
     if (!gameState) return;
@@ -423,12 +383,8 @@ function renderUnits() {
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
             
             if (unit.destroyed) {
-                let worldX, worldZ;
-                if (isMobile) {
-                    worldX = unit.x - 3.5; worldZ = unit.y - 3.5 + 5;
-                } else {
-                    worldX = unit.x - 3.5 - 5; worldZ = unit.y - 3.5;
-                }
+                const worldX = unit.x - 3.5; 
+                const worldZ = unit.y - 3.5 + 5;
                 burningUnitsPositions.push({ x: worldX, z: worldZ });
             }
         });
@@ -439,12 +395,8 @@ function renderUnits() {
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2');
             
             if (unit.destroyed) {
-                let worldX, worldZ;
-                if (isMobile) {
-                    worldX = unit.x - 3.5; worldZ = unit.y - 3.5 - 5;
-                } else {
-                    worldX = unit.x - 3.5 + 5; worldZ = unit.y - 3.5;
-                }
+                const worldX = unit.x - 3.5; 
+                const worldZ = unit.y - 3.5 - 5;
                 burningUnitsPositions.push({ x: worldX, z: worldZ });
             }
         });
@@ -472,14 +424,6 @@ function animate() {
 animate();
 
 window.addEventListener('resize', () => {
-    const currentMobileState = isMobileDevice();
-    if (currentMobileState !== isMobile) {
-        isMobile = currentMobileState;
-        positionGridHelpers();
-        createGridPlatforms();
-        if (gameState) renderUnits();
-    }
-    
     updateCameraPosition();
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
