@@ -136,8 +136,8 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     
     const maxDim = Math.max(size.x, size.y, size.z);
     
-    // СДЕЛАЛИ МОДЕЛИ В 2 РАЗА БОЛЬШЕ (было 0.5, стало 1.0)
-    const targetSize = 1.0; 
+    // ЕЩЕ В 2 РАЗА БОЛЬШЕ (теперь целевой размер 2.0)
+    const targetSize = 2.0; 
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
@@ -147,7 +147,7 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate.position.z = -center.z * scaleFactor;
     sauModelTemplate.position.y = -box.min.y * scaleFactor;
 
-    console.log("Военная мастер-модель кэширована в увеличенном масштабе.");
+    console.log("Военная мастер-модель кэширована в гигантском масштабе.");
     
     if (gameState) renderUnits();
 }, undefined, (error) => {
@@ -415,7 +415,6 @@ function renderUnits() {
 
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
-            // Кольцо синее (0x1e90ff), но сама модель внутри будет хаки
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
             
             if (unit.destroyed) {
@@ -432,7 +431,6 @@ function renderUnits() {
 
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
-            // Кольцо красное (0xff4757), но сама модель внутри будет хаки
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2');
             
             if (unit.destroyed) {
