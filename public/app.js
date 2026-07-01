@@ -126,7 +126,7 @@ function createGridPlatforms() {
             cell1.position.set(x - 3.5, 0, z - 3.5 + 5);
             cell2.position.set(x - 3.5, 0, z - 3.5 - 5);
 
-            // Сохраняем только координаты ячейки
+            // Сохраняем только координаты ячейки внутри ее сетки
             cell1.userData = { gridX: x, gridY: z };
             cell2.userData = { gridX: x, gridY: z };
 
@@ -282,7 +282,7 @@ btnMove.addEventListener('click', (e) => {
     btnFire.classList.remove('active');
 });
 
-// --- RAYCASTING (CLICKS С ИСПРАВЛЕНИЕМ СМАРТФОНОВ) ---
+// --- RAYCASTING (ОБРАБОТКА КЛИКОВ) ---
 window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
     if (!gameState) return;
@@ -302,14 +302,7 @@ window.addEventListener('click', (event) => {
         const clickedMesh = intersects[0].object;
         const { gridX, gridY } = clickedMesh.userData;
 
-        // Динамически вычисляем владельца поля по Z координате меша
-        const clickedFieldOwner = (clickedMesh.position.z > 0) ? 'p1' : 'p2';
-        const isEnemyField = (clickedFieldOwner !== myRole);
-
         if (currentMode === 'fire') {
-            // Стрелять можно только на чужую половину
-            if (!isEnemyField) return;
-            
             hasDoneActionThisTurn = true; 
             controls.classList.add('hidden'); 
 
@@ -321,15 +314,13 @@ window.addEventListener('click', (event) => {
             });
         } 
         else if (currentMode === 'move') {
-            // Двигаться можно только на своей половине
-            if (isEnemyField) return; 
-
             const targetUnits = gameState.players[myRole].units;
             if (!targetUnits || targetUnits.length === 0) return;
 
             const aliveUnits = targetUnits.filter(u => !u.destroyed);
             if (aliveUnits.length === 0) return;
 
+            // Находим ближайшего к клику живого юнита, чтобы сдвинуть именно его
             let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
             if (aliveUnits.length > 1) {
                 const dist0 = Math.abs(aliveUnits[0].x - gridX) + Math.abs(aliveUnits[0].y - gridY);
