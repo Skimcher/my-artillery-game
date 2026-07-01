@@ -126,8 +126,9 @@ function createGridPlatforms() {
             cell1.position.set(x - 3.5, 0, z - 3.5 + 5);
             cell2.position.set(x - 3.5, 0, z - 3.5 - 5);
 
-            cell1.userData = { gridX: x, gridY: z, isEnemy: false };
-            cell2.userData = { gridX: x, gridY: z, isEnemy: true };
+            // Сохраняем только координаты ячейки
+            cell1.userData = { gridX: x, gridY: z };
+            cell2.userData = { gridX: x, gridY: z };
 
             scene.add(cell1);
             scene.add(cell2);
@@ -281,7 +282,7 @@ btnMove.addEventListener('click', (e) => {
     btnFire.classList.remove('active');
 });
 
-// --- RAYCASTING (CLICKS) ---
+// --- RAYCASTING (CLICKS С ИСПРАВЛЕНИЕМ СМАРТФОНОВ) ---
 window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
     if (!gameState) return;
@@ -299,10 +300,15 @@ window.addEventListener('click', (event) => {
 
     if (intersects.length > 0) {
         const clickedMesh = intersects[0].object;
-        const { gridX, gridY, isEnemy } = clickedMesh.userData;
+        const { gridX, gridY } = clickedMesh.userData;
+
+        // Динамически вычисляем владельца поля по Z координате меша
+        const clickedFieldOwner = (clickedMesh.position.z > 0) ? 'p1' : 'p2';
+        const isEnemyField = (clickedFieldOwner !== myRole);
 
         if (currentMode === 'fire') {
-            if (!isEnemy) return;
+            // Стрелять можно только на чужую половину
+            if (!isEnemyField) return;
             
             hasDoneActionThisTurn = true; 
             controls.classList.add('hidden'); 
@@ -315,11 +321,10 @@ window.addEventListener('click', (event) => {
             });
         } 
         else if (currentMode === 'move') {
-            const targetRole = isEnemy ? 'p2' : 'p1';
-            
-            if (targetRole !== myRole) return; 
+            // Двигаться можно только на своей половине
+            if (isEnemyField) return; 
 
-            const targetUnits = gameState.players[targetRole].units;
+            const targetUnits = gameState.players[myRole].units;
             if (!targetUnits || targetUnits.length === 0) return;
 
             const aliveUnits = targetUnits.filter(u => !u.destroyed);
@@ -342,7 +347,7 @@ window.addEventListener('click', (event) => {
                 x: gridX, 
                 y: gridY, 
                 unitIndex: targetUnitIndex,
-                forcedRole: targetRole 
+                forcedRole: myRole 
             });
         }
     }
@@ -367,9 +372,7 @@ socket.on('turnChanged', (data) => {
     gameState.turn = data.turn;
     timerDisplay.innerText = data.timer;
     
-    // СБРАСЫВАЕМ флаг действия для нового раунда
     hasDoneActionThisTurn = false; 
-    
     updateTurnUI();
 });
 
