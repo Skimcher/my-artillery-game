@@ -135,27 +135,26 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     box.getSize(size);
     
     const maxDim = Math.max(size.x, size.y, size.z);
-    // Уменьшили размер на 25% (было 2.0, стало 1.5)
     const targetSize = 1.5; 
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
-    // Рассчитываем геометрический центр исходной модели
+    // Вычисляем отклонение центра от нуля
     const center = new THREE.Vector3();
     box.getCenter(center);
     
-    // Считаем локальное смещение с учетом нового масштаба
+    // Запоминаем точный вектор локального сдвига
     sauCenterOffset.x = -center.x * scaleFactor;
     sauCenterOffset.z = -center.z * scaleFactor;
     sauCenterOffset.y = -box.min.y * scaleFactor;
 
-    console.log("Уменьшенная модель загружена. Сдвиг центра:", sauCenterOffset);
+    console.log("Модель загружена. Центрирование готово:", sauCenterOffset);
     if (gameState) renderUnits();
 }, undefined, (error) => {
     console.error('Критическая ошибка предзагрузки модели:', error);
 });
 
-// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ СТРОГО ПО ЦЕНТРУ КЛЕТКИ ---
+// --- ОТОБРАЖЕНИЕ С РАЗВОРOТОМ ДУЛА НА ПРОТИВНИКА ---
 function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -164,12 +163,16 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
         const offsetZ = (owner === 'p1') ? 5 : -5;
         worldX = gridX - 3.5;
         worldZ = gridY - 3.5 + offsetZ;
-        group.rotation.y = (owner === 'p1') ? Math.PI : 0;
+        
+        // На мобилках: p1 смотрит вверх (на поле p2), p2 смотрит вниз (на поле p1)
+        group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
     } else {
         const offsetX = (owner === 'p1') ? -5 : 5;
         worldX = gridX - 3.5 + offsetX;
         worldZ = gridY - 3.5;
-        group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
+        
+        // На десктопе: левый игрок (p1) смотрит направо (0), правый игрок (p2) смотрит налево (PI)
+        group.rotation.y = (owner === 'p1') ? 0 : Math.PI;
     }
 
     // Базовая точка группы ставится ровно в центр клетки
@@ -178,7 +181,7 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     visualUnits[id] = group;
 
     // Круг-маркер под танком
-    const ringGeo = new THREE.RingGeometry(0.30, 0.36, 32); // Чуть уменьшили кольцо под размер модели
+    const ringGeo = new THREE.RingGeometry(0.30, 0.36, 32); 
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
         color: isDestroyed ? 0x222222 : ringColor, 
@@ -191,17 +194,8 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     if (sauModelTemplate) {
         const model = sauModelTemplate.clone();
         
-        // Корректируем локальное смещение клона, центрируя его относительно родительской группы
-        if (isMobile) {
-            model.position.x = sauCenterOffset.x;
-            model.position.y = sauCenterOffset.y;
-            model.position.z = (owner === 'p1') ? -sauCenterOffset.z : sauCenterOffset.z;
-        } else {
-            // Для десктопа переворачиваем смещение по оси Z в зависимости от направления взгляда игрока
-            model.position.x = (owner === 'p1') ? -sauCenterOffset.z : sauCenterOffset.z;
-            model.position.y = sauCenterOffset.y;
-            model.position.z = sauCenterOffset.x;
-        }
+        // Идеальное локальное центрирование. Теперь модель вращается строго вокруг своей оси!
+        model.position.set(sauCenterOffset.x, sauCenterOffset.y, sauCenterOffset.z);
         
         model.traverse((child) => {
             if (child.isMesh) {
