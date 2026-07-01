@@ -5,6 +5,7 @@ let myRole = null;
 let myId = null;            
 let gameState = null;       
 let currentMode = 'fire';   
+let hasDoneActionThisTurn = false; // ФЛАГ: совершил ли игрок действие в этом ходу
 
 const visualUnits = {};     
 const particles = []; 
@@ -21,7 +22,6 @@ scene.background = new THREE.Color(0xF5F2EB);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// Слегка отодвинули камеру назад (z: 13), чтобы поле ушло вверх и не перекрывалось кнопками
 function updateCameraPosition() {
     camera.position.set(0, 18, 13); 
     camera.lookAt(0, 0, 0);
@@ -124,7 +124,6 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     sauCenterOffset.z = -center.z * scaleFactor;
     sauCenterOffset.y = -box.min.y * scaleFactor;
 
-    console.log("Model loaded. Center offset calculated.");
     if (gameState) renderUnits();
 }, undefined, (error) => {
     console.error('Error loading model:', error);
@@ -138,9 +137,7 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const worldX = gridX - 3.5;
     const worldZ = gridY - 3.5 + offsetZ;
     
-    // Facing each other (p1 looks up, p2 looks down)
     group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
-
     group.position.set(worldX, 0, worldZ);
     scene.add(group);
     visualUnits[id] = group;
@@ -163,30 +160,17 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
             if (child.isMesh) {
                 child.castShadow = true;
                 child.receiveShadow = true;
-                
                 if (!isDestroyed) {
-                    child.material = new THREE.MeshStandardMaterial({
-                        color: 0x4B5320, 
-                        roughness: 0.7,   
-                        metalness: 0.15
-                    });
+                    child.material = new THREE.MeshStandardMaterial({ color: 0x4B5320, roughness: 0.7, metalness: 0.15 });
                 } else {
-                    child.material = new THREE.MeshStandardMaterial({
-                        color: 0x2b2e18, 
-                        roughness: 0.95,
-                        transparent: true,
-                        opacity: 0.45
-                    });
+                    child.material = new THREE.MeshStandardMaterial({ color: 0x2b2e18, roughness: 0.95, transparent: true, opacity: 0.45 });
                 }
             }
         });
-        
         group.add(model);
     } else {
         const placeholderGeo = new THREE.BoxGeometry(0.5, 0.3, 0.5);
-        const placeholderMat = new THREE.MeshStandardMaterial({ 
-            color: isDestroyed ? 0x2b2e18 : 0x4B5320 
-        });
+        const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x2b2e18 : 0x4B5320 });
         const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
         placeholder.position.y = 0.15;
         group.add(placeholder);
@@ -250,6 +234,7 @@ const controls = document.getElementById('controls');
 
 btnFire.addEventListener('click', (e) => {
     e.stopPropagation(); 
+    if (hasDoneActionThisTurn) return;
     currentMode = 'fire';
     btnFire.classList.add('active');
     btnMove.classList.remove('active');
@@ -257,6 +242,7 @@ btnFire.addEventListener('click', (e) => {
 
 btnMove.addEventListener('click', (e) => {
     e.stopPropagation(); 
+    if (hasDoneActionThisTurn) return;
     currentMode = 'move';
     btnMove.classList.add('active');
     btnFire.classList.remove('active');
@@ -266,6 +252,9 @@ btnMove.addEventListener('click', (e) => {
 window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
     if (!gameState) return;
+    
+    // Если сейчас не ваш ход ИЛИ вы уже сделали действие в этом ходу — блокируем клик
+    if (gameState.turn !== myId || hasDoneActionThisTurn) return;
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
@@ -282,19 +271,24 @@ window.addEventListener('click', (event) => {
 
         if (currentMode === 'fire') {
             if (!isEnemy) return;
-            const firingRole = (gameState.turn === myId) ? myRole : (myRole === 'p1' ? 'p2' : 'p1');
             
+            hasDoneActionThisTurn = true; // Запоминаем, что действие совершено
+            controls.classList.add('hidden'); // Моментально прячем кнопки ходов
+
             socket.emit('playerAction', { 
                 type: 'fire', 
                 x: gridX, 
                 y: gridY,
-                forcedRole: firingRole 
+                forcedRole: myRole 
             });
         } 
         else if (currentMode === 'move') {
             const targetRole = isEnemy ? 'p2' : 'p1';
-            const targetUnits = gameState.players[targetRole].units;
             
+            // Маневрировать можно только своими юнитами на своем поле
+            if (targetRole !== myRole) return; 
+
+            const targetUnits = gameState.players[targetRole].units;
             if (!targetUnits || targetUnits.length === 0) return;
 
             const aliveUnits = targetUnits.filter(u => !u.destroyed);
@@ -303,12 +297,15 @@ window.addEventListener('click', (event) => {
             let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
             if (aliveUnits.length > 1) {
                 const dist0 = Math.abs(aliveUnits[0].x - gridX) + Math.abs(aliveUnits[0].y - gridY);
-                const dist1 = Math.abs(aliveUnits[1].length === 0 ? 0 : aliveUnits[1].x - gridX) + Math.abs(aliveUnits[1].y - gridY);
+                const dist1 = Math.abs(aliveUnits[1].x - gridX) + Math.abs(aliveUnits[1].y - gridY);
                 if (dist1 < dist0) {
                     targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[1]);
                 }
             }
             
+            hasDoneActionThisTurn = true; // Запоминаем, что действие совершено
+            controls.classList.add('hidden'); // Моментально прячем кнопки ходов
+
             socket.emit('playerAction', { 
                 type: 'move', 
                 x: gridX, 
@@ -328,7 +325,6 @@ socket.on('gameStart', (data) => {
     myRole = data.role;
     myId = socket.id;
     gameState = data.state;
-    controls.classList.remove('hidden');
     updateTurnUI();
     renderUnits();
 });
@@ -339,6 +335,10 @@ socket.on('turnChanged', (data) => {
     if (!gameState) return;
     gameState.turn = data.turn;
     timerDisplay.innerText = data.timer;
+    
+    // Передаем ход -> СБРАСЫВАЕМ флаг действия для нового раунда
+    hasDoneActionThisTurn = false; 
+    
     updateTurnUI();
 });
 
@@ -360,9 +360,18 @@ function updateTurnUI() {
     if (gameState.turn === myId) {
         turnIndicator.innerText = "YOUR TURN!";
         turnIndicator.style.color = "#2ed573";
+        
+        // Если в этом ходу действие еще НЕ совершалось — показываем кнопки управления
+        if (!hasDoneActionThisTurn) {
+            controls.classList.remove('hidden');
+            currentMode = 'fire';
+            btnFire.classList.add('active');
+            btnMove.classList.remove('active');
+        }
     } else {
         turnIndicator.innerText = "OPPONENT'S TURN...";
         turnIndicator.style.color = "#ff4757";
+        controls.classList.add('hidden'); // Прячем во время чужого хода
     }
 }
 
