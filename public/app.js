@@ -39,9 +39,23 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
 dirLight.position.set(15, 30, 10);
 scene.add(dirLight);
 
-// --- GRID PLATFORMS ---
-const gridHelperLeft = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
-const gridHelperRight = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
+// --- GRID PLATFORMS (ЯРКО-ЖЕЛТЫЙ ПУНКТИР) ---
+const gridLineMaterial = new THREE.LineDashedMaterial({
+    color: 0xffe100,     // Ярко-желтый цвет
+    dashSize: 0.15,      // Длина штриха
+    gapSize: 0.1,        // Длина пропуска
+    linewidth: 2         // Толщина линий
+});
+
+const gridHelperLeft = new THREE.GridHelper(8, 8);
+const gridHelperRight = new THREE.GridHelper(8, 8);
+
+gridHelperLeft.material = gridLineMaterial;
+gridHelperRight.material = gridLineMaterial;
+
+// Рассчитываем пунктир для корректного отображения в Three.js
+gridHelperLeft.computeLineDistances();
+gridHelperRight.computeLineDistances();
 
 function positionGridHelpers() {
     gridHelperLeft.position.set(0, 0.06, 5);
@@ -253,7 +267,6 @@ window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
     if (!gameState) return;
     
-    // Если сейчас не ваш ход ИЛИ вы уже сделали действие в этом ходу — блокируем клик
     if (gameState.turn !== myId || hasDoneActionThisTurn) return;
 
     const raycaster = new THREE.Raycaster();
@@ -272,8 +285,8 @@ window.addEventListener('click', (event) => {
         if (currentMode === 'fire') {
             if (!isEnemy) return;
             
-            hasDoneActionThisTurn = true; // Запоминаем, что действие совершено
-            controls.classList.add('hidden'); // Моментально прячем кнопки ходов
+            hasDoneActionThisTurn = true; 
+            controls.classList.add('hidden'); 
 
             socket.emit('playerAction', { 
                 type: 'fire', 
@@ -285,7 +298,6 @@ window.addEventListener('click', (event) => {
         else if (currentMode === 'move') {
             const targetRole = isEnemy ? 'p2' : 'p1';
             
-            // Маневрировать можно только своими юнитами на своем поле
             if (targetRole !== myRole) return; 
 
             const targetUnits = gameState.players[targetRole].units;
@@ -303,8 +315,8 @@ window.addEventListener('click', (event) => {
                 }
             }
             
-            hasDoneActionThisTurn = true; // Запоминаем, что действие совершено
-            controls.classList.add('hidden'); // Моментально прячем кнопки ходов
+            hasDoneActionThisTurn = true; 
+            controls.classList.add('hidden'); 
 
             socket.emit('playerAction', { 
                 type: 'move', 
@@ -336,7 +348,7 @@ socket.on('turnChanged', (data) => {
     gameState.turn = data.turn;
     timerDisplay.innerText = data.timer;
     
-    // Передаем ход -> СБРАСЫВАЕМ флаг действия для нового раунда
+    // СБРАСЫВАЕМ флаг действия для нового раунда
     hasDoneActionThisTurn = false; 
     
     updateTurnUI();
@@ -361,7 +373,6 @@ function updateTurnUI() {
         turnIndicator.innerText = "YOUR TURN!";
         turnIndicator.style.color = "#2ed573";
         
-        // Если в этом ходу действие еще НЕ совершалось — показываем кнопки управления
         if (!hasDoneActionThisTurn) {
             controls.classList.remove('hidden');
             currentMode = 'fire';
@@ -371,7 +382,7 @@ function updateTurnUI() {
     } else {
         turnIndicator.innerText = "OPPONENT'S TURN...";
         turnIndicator.style.color = "#ff4757";
-        controls.classList.add('hidden'); // Прячем во время чужого хода
+        controls.classList.add('hidden'); 
     }
 }
 
