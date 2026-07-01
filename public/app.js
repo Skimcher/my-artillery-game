@@ -39,23 +39,42 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
 dirLight.position.set(15, 30, 10);
 scene.add(dirLight);
 
-// --- GRID PLATFORMS (ЯРКО-ЖЕЛТЫЙ ПУНКТИР) ---
+// --- GRID PLATFORMS (ГАРАНТИРОВАННЫЙ ЯРКО-ЖЕЛТЫЙ ПУНКТИР) ---
 const gridLineMaterial = new THREE.LineDashedMaterial({
     color: 0xffe100,     // Ярко-желтый цвет
     dashSize: 0.15,      // Длина штриха
     gapSize: 0.1,        // Длина пропуска
-    linewidth: 2         // Толщина линий
+    scale: 1             // Масштаб пунктира
 });
 
-const gridHelperLeft = new THREE.GridHelper(8, 8);
-const gridHelperRight = new THREE.GridHelper(8, 8);
+// Функция для ручного создания сетки 8х8 из пунктирных линий
+function createDashedGrid() {
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    const size = 8;
+    const step = 1;
+    const half = size / 2;
 
-gridHelperLeft.material = gridLineMaterial;
-gridHelperRight.material = gridLineMaterial;
+    // Генерируем линии вдоль и поперек
+    for (let i = 0; i <= size; i++) {
+        const coord = i * step - half;
+        // Продольные линии
+        vertices.push(coord, 0, -half,  coord, 0, half);
+        // Поперечные линии
+        vertices.push(-half, 0, coord,  half, 0, coord);
+    }
 
-// Рассчитываем пунктир для корректного отображения в Three.js
-gridHelperLeft.computeLineDistances();
-gridHelperRight.computeLineDistances();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    
+    // Создаем объект линий с нашим пунктирным материалом
+    const grid = new THREE.LineSegments(geometry, gridLineMaterial);
+    grid.computeLineDistances(); // Обязательно для активации пунктира
+    return grid;
+}
+
+// Создаем две наши кастомные сетки
+const gridHelperLeft = createDashedGrid();
+const gridHelperRight = createDashedGrid();
 
 function positionGridHelpers() {
     gridHelperLeft.position.set(0, 0.06, 5);
