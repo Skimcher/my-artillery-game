@@ -14,7 +14,7 @@ body, html {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* Контейнер Three.js на весь экран */
+/* Контейнер Three.js */
 #canvas-container {
     position: absolute;
     top: 0;
@@ -25,105 +25,122 @@ body, html {
 }
 
 /* ==========================================================================
-   ВЕРХНЕЕ МЕНЮ (ХОД И ТАЙМЕР) — КРУПНОЕ НА ВСЕХ УСТРОЙСТВАХ
+   ОСНОВНЫЕ СТИЛИ ДЛЯ ПК (АККУРАТНЫЕ И КОМПАКТНЫЕ ЭЛЕМЕНТЫ)
    ========================================================================== */
+
 #ui-header {
     position: fixed;
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(255, 255, 255, 0.95);
-    /* На смартфонах ширина будет 85% экрана, на ПК — максимум 380px */
-    width: 85vw;
-    max-width: 380px;
-    padding: 18px 30px;
-    border-radius: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    padding: 12px 24px;
+    border-radius: 14px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
     text-align: center;
     z-index: 10;
+    min-width: 250px;
 }
 
 #turn-indicator {
-    font-size: min(6.5vw, 24px); /* Авто-масштаб: огромный на смартфонах, аккуратный на ПК */
+    font-size: 20px;
     font-weight: 800;
-    letter-spacing: 1px;
-    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
     color: #2f3542;
 }
 
 #timer-container {
-    font-size: min(4vw, 15px);
+    font-size: 13px;
     color: #747d8c;
     font-weight: 600;
 }
 
 #timer {
-    font-size: min(4.8vw, 17px);
+    font-size: 15px;
     font-weight: 700;
     color: #2f3542;
 }
 
-/* ==========================================================================
-   ГИГАНТСКИЕ КНОПКИ УПРАВЛЕНИЯ — СТРОГО МЕЖДУ ПОЛЯМИ
-   ========================================================================== */
+/* Кнопки на ПК: маленькие, строго в промежутке между полями */
 #controls {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     display: flex;
-    /* Контейнер займет 90% ширины экрана на смартфоне, давая кнопкам стать огромными */
-    width: 90vw;
-    max-width: 500px;
-    gap: 25px;
+    gap: 15px;
     z-index: 10;
-    background: rgba(255, 255, 255, 0.7);
-    padding: 15px;
-    border-radius: 24px;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
+    background: rgba(255, 255, 255, 0.4);
+    padding: 8px 12px;
+    border-radius: 12px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 #controls button {
-    flex: 1; /* Каждая кнопка растягивается ровно на половину доступной ширины */
-    padding: min(5vw, 22px) 0; /* Высокая область нажатия, идеальная под большие пальцы */
-    font-size: min(6vw, 22px);  /* Крупные, жирные и отлично читаемые буквы */
-    font-weight: 900;
-    letter-spacing: 1.5px;
+    padding: 8px 24px; /* Компактный размер для мышки */
+    font-size: 15px;    /* Небольшой аккуратный шрифт */
+    font-weight: 800;
+    letter-spacing: 0.5px;
     border: none;
-    border-radius: 16px;
+    border-radius: 6px;
     cursor: pointer;
     color: white;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
     transition: all 0.15s ease;
 }
 
 #controls button:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
-#btn-fire {
-    background-color: #ff4757;
-    opacity: 0.6;
-}
-#btn-fire.active {
-    background-color: #ff1f35;
-    opacity: 1;
-    box-shadow: 0 0 20px rgba(255, 31, 53, 0.5);
-}
+#btn-fire { background-color: #ff4757; opacity: 0.6; }
+#btn-fire.active { background-color: #ff1f35; opacity: 1; box-shadow: 0 0 12px rgba(255, 31, 53, 0.35); }
 
-#btn-move {
-    background-color: #2ed573;
-    opacity: 0.6;
-}
-#btn-move.active {
-    background-color: #26af5f;
-    opacity: 1;
-    box-shadow: 0 0 20px rgba(38, 175, 95, 0.5);
-}
+#btn-move { background-color: #2ed573; opacity: 0.6; }
+#btn-move.active { background-color: #26af5f; opacity: 1; box-shadow: 0 0 12px rgba(38, 175, 95, 0.35); }
 
-.hidden {
-    display: none !important;
+.hidden { display: none !important; }
+
+
+/* ==========================================================================
+   СТИЛИ ДЛЯ СМАРТФОНОВ (ВКЛЮЧАЮТСЯ ТОЛЬКО НА ЭКРАНАХ ДО 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+    
+    #ui-header {
+        top: 15px;
+        width: 85vw;
+        padding: 15px 25px;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    }
+
+    #turn-indicator {
+        font-size: 28px;
+        margin-bottom: 4px;
+    }
+
+    #timer-container { font-size: 16px; }
+    #timer { font-size: 18px; }
+
+    /* На смартфонах расширяем панель и делаем кнопки крупными */
+    #controls {
+        width: 85vw; 
+        padding: 14px;
+        gap: 20px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    #controls button {
+        flex: 1;
+        padding: 18px 0; /* Огромная тач-зона под палец */
+        font-size: 26px;  /* Большие жирные буквы */
+        border-radius: 14px;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18);
+    }
 }
