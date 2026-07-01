@@ -11,6 +11,7 @@ const particles = [];
 const burningUnitsPositions = []; 
 
 const gltfLoader = new THREE.GLTFLoader();
+let sauModelTemplate = null; // Шаблон модели в памяти для мгновенного клонирования
 
 // --- ПРОВЕРКА НА МОБИЛЬНОЕ УСТРОЙСТВО ---
 function isMobileDevice() {
@@ -43,7 +44,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
-// Мощный свет, чтобы модель не была темной
+// Освещение сцены
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.9); 
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -125,7 +126,35 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- УМНОЕ ОТОБРАЖЕНИЕ САУ ---
+// --- ПРЕДВАРИТЕЛЬНАЯ ОДНОКРАТНАЯ ЗАГРУЗКА МОДЕЛИ ---
+gltfLoader.load('/models/sau.glb', (gltf) => {
+    sauModelTemplate = gltf.scene;
+    
+    // Сразу нормализуем размеры и центрируем мастер-шаблон
+    const box = new THREE.Box3().setFromObject(sauModelTemplate);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const targetSize = 0.5; 
+    const scaleFactor = targetSize / maxDim;
+    sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
+    
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    sauModelTemplate.position.x = -center.x * scaleFactor;
+    sauModelTemplate.position.z = -center.z * scaleFactor;
+    sauModelTemplate.position.y = -box.min.y * scaleFactor;
+
+    console.log("Мастер-модель успешно загружена в кэш.");
+    
+    // Если игра уже стартовала к моменту загрузки файла — принудительно рендерим пушки
+    if (gameState) renderUnits();
+}, undefined, (error) => {
+    console.error('Критическая ошибка предзагрузки модели:', error);
+});
+
+// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ САУ (БЕЗ МИГАНИЙ) ---
 function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -157,35 +186,10 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     ring.position.y = 0.02; 
     group.add(ring);
 
-    // Временный кубик
-    const placeholderGeo = new THREE.BoxGeometry(0.4, 0.3, 0.4);
-    const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x222222 : color });
-    const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
-    placeholder.position.y = 0.15;
-    group.add(placeholder);
-
-    // Загрузка 3D модели с авто-нормализацией размеров
-    gltfLoader.load('/models/sau.glb', (gltf) => {
-        const model = gltf.scene;
+    // Если шаблон модели уже в кэше, клонируем его СИНХРОННО (0 миллисекунд задержки)
+    if (sauModelTemplate) {
+        const model = sauModelTemplate.clone();
         
-        // Автоматически считаем реальные границы модели, исправляя кривой экспорт
-        const box = new THREE.Box3().setFromObject(model);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const targetSize = 0.5; // Оптимальный размер на клетке
-        const scaleFactor = targetSize / maxDim;
-        model.scale.set(scaleFactor, scaleFactor, scaleFactor);
-        
-        // Центрируем модель по осям X и Z относительно её Pivot Point
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-        model.position.x = -center.x * scaleFactor;
-        model.position.z = -center.z * scaleFactor;
-        model.position.y = -box.min.y * scaleFactor; // Ровно на землю
-
-        // Принудительно чиним материалы и настраиваем цвета
         model.traverse((child) => {
             if (child.isMesh) {
                 child.castShadow = true;
@@ -208,13 +212,15 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
             }
         });
         
-        // Подмена кубика на готовую пушку
-        group.remove(placeholder);
         group.add(model);
-
-    }, undefined, (error) => {
-        console.error('Ошибка обработки модели:', error);
-    });
+    } else {
+        // Резервный кубик ТОЛЬКО на самый первый кадр загрузки сайта, если интернет совсем плохой
+        const placeholderGeo = new THREE.BoxGeometry(0.4, 0.3, 0.4);
+        const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x222222 : color });
+        const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
+        placeholder.position.y = 0.15;
+        group.add(placeholder);
+    }
 }
 
 function createSplash(gridX, gridY, targetRole, type) {
