@@ -25,7 +25,7 @@ body, html {
 }
 
 /* ==========================================================================
-   ВЕРХНЕЕ МЕНЮ (ПК-ВЕРСИЯ)
+   ВЕРХНЕЕ МЕНЮ (ХОД И ТАЙМЕР) — КРУПНОЕ НА ВСЕХ УСТРОЙСТВАХ
    ========================================================================== */
 #ui-header {
     position: fixed;
@@ -33,36 +33,38 @@ body, html {
     left: 50%;
     transform: translateX(-50%);
     background: rgba(255, 255, 255, 0.95);
-    padding: 15px 30px;
-    border-radius: 16px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    /* На смартфонах ширина будет 85% экрана, на ПК — максимум 380px */
+    width: 85vw;
+    max-width: 380px;
+    padding: 18px 30px;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
     text-align: center;
     z-index: 10;
-    min-width: 280px;
 }
 
 #turn-indicator {
-    font-size: 22px;
+    font-size: min(6.5vw, 24px); /* Авто-масштаб: огромный на смартфонах, аккуратный на ПК */
     font-weight: 800;
     letter-spacing: 1px;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
     color: #2f3542;
 }
 
 #timer-container {
-    font-size: 14px;
+    font-size: min(4vw, 15px);
     color: #747d8c;
     font-weight: 600;
 }
 
 #timer {
-    font-size: 16px;
+    font-size: min(4.8vw, 17px);
     font-weight: 700;
     color: #2f3542;
 }
 
 /* ==========================================================================
-   КНОПКИ УПРАВЛЕНИЯ (ПК-ВЕРСИЯ)
+   ГИГАНТСКИЕ КНОПКИ УПРАВЛЕНИЯ — СТРОГО МЕЖДУ ПОЛЯМИ
    ========================================================================== */
 #controls {
     position: fixed;
@@ -70,83 +72,58 @@ body, html {
     left: 50%;
     transform: translate(-50%, -50%);
     display: flex;
-    gap: 20px;
+    /* Контейнер займет 90% ширины экрана на смартфоне, давая кнопкам стать огромными */
+    width: 90vw;
+    max-width: 500px;
+    gap: 25px;
     z-index: 10;
-    background: rgba(255, 255, 255, 0.5);
-    padding: 10px 15px;
-    border-radius: 12px;
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.7);
+    padding: 15px;
+    border-radius: 24px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
 }
 
 #controls button {
-    padding: 12px 35px;
-    font-size: 18px;
-    font-weight: 800;
-    letter-spacing: 1px;
+    flex: 1; /* Каждая кнопка растягивается ровно на половину доступной ширины */
+    padding: min(5vw, 22px) 0; /* Высокая область нажатия, идеальная под большие пальцы */
+    font-size: min(6vw, 22px);  /* Крупные, жирные и отлично читаемые буквы */
+    font-weight: 900;
+    letter-spacing: 1.5px;
     border: none;
-    border-radius: 8px;
+    border-radius: 16px;
     cursor: pointer;
     color: white;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-    transition: all 0.2s ease;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    transition: all 0.15s ease;
 }
 
 #controls button:active {
-    transform: scale(0.95);
+    transform: scale(0.94);
 }
 
-#btn-fire { background-color: #ff4757; opacity: 0.6; }
-#btn-fire.active { background-color: #ff1f35; opacity: 1; box-shadow: 0 0 15px rgba(255, 31, 53, 0.4); }
+#btn-fire {
+    background-color: #ff4757;
+    opacity: 0.6;
+}
+#btn-fire.active {
+    background-color: #ff1f35;
+    opacity: 1;
+    box-shadow: 0 0 20px rgba(255, 31, 53, 0.5);
+}
 
-#btn-move { background-color: #2ed573; opacity: 0.6; }
-#btn-move.active { background-color: #26af5f; opacity: 1; box-shadow: 0 0 15px rgba(38, 175, 95, 0.4); }
+#btn-move {
+    background-color: #2ed573;
+    opacity: 0.6;
+}
+#btn-move.active {
+    background-color: #26af5f;
+    opacity: 1;
+    box-shadow: 0 0 20px rgba(38, 175, 95, 0.5);
+}
 
-.hidden { display: none !important; }
-
-/* ==========================================================================
-   АДАПТИВ ДЛЯ СМАРТФОНОВ (УВЕЛИЧЕНИЕ В ИДЕАЛЬНЫХ ПРОПОРЦИЯХ)
-   ========================================================================== */
-@media (max-width: 768px) {
-    
-    /* Верхняя плашка состояния: увеличиваем в 2.5 раза */
-    #ui-header {
-        top: 15px;
-        min-width: 80vw;
-        padding: 15px 25px;
-        border-radius: 20px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-    }
-
-    #turn-indicator {
-        font-size: 28px; /* Крупный и заметный текст */
-        margin-bottom: 4px;
-    }
-
-    #timer-container {
-        font-size: 16px;
-    }
-
-    #timer {
-        font-size: 18px;
-    }
-
-    /* Контейнер кнопок: растягиваем по ширине экрана, чтобы кнопки имели большой запас */
-    #controls {
-        width: 80vw; 
-        max-width: 450px;
-        padding: 12px;
-        gap: 20px;
-        border-radius: 20px;
-        background: rgba(255, 255, 255, 0.75);
-    }
-
-    /* Сами кнопки: делаем ровно в 2.5 раза больше ПК-версии */
-    #controls button {
-        flex: 1; /* Кнопки поровну делят ширину контейнера */
-        padding: 18px 0; /* Высокая тач-зона под большой палец */
-        font-size: 24px;  /* Большие, читаемые буквы */
-        border-radius: 14px;
-        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18);
-    }
+.hidden {
+    display: none !important;
 }
