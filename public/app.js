@@ -14,7 +14,6 @@ const gltfLoader = new THREE.GLTFLoader();
 
 // --- ПРОВЕРКА НА МОБИЛЬНОЕ УСТРОЙСТВО ---
 function isMobileDevice() {
-    // Проверяем как по ширине экрана, так и по userAgent
     return (window.innerWidth < window.innerHeight) || 
            (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
 }
@@ -28,14 +27,11 @@ scene.background = new THREE.Color(0xF5F2EB);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// Настраиваем положение камеры в зависимости от экрана
 function updateCameraPosition() {
     if (isMobile) {
-        // На смартфоне смотрим почти вертикально сверху, чтобы видеть верхнее и нижнее поле
         camera.position.set(0, 18, 11); 
         camera.lookAt(0, 0, 0);
     } else {
-        // На ПК смотрим сбоку под привычным углом
         camera.position.set(0, 12, 14); 
         camera.lookAt(0, 1, 0);
     }
@@ -44,7 +40,6 @@ updateCameraPosition();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-// Оптимизация для мобильных ретина-дисплеев (чтобы игра не тормозила из-за овер-разрешения)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
@@ -60,11 +55,9 @@ const gridHelperRight = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
 
 function positionGridHelpers() {
     if (isMobile) {
-        // Смартфон: левое поле идет вниз (ближе к игроку), правое — вверх (к врагу)
         gridHelperLeft.position.set(0, 0.06, 5);
         gridHelperRight.position.set(0, 0.06, -5);
     } else {
-        // ПК: классическое размещение слева и справа
         gridHelperLeft.position.set(-5, 0.06, 0);
         gridHelperRight.position.set(5, 0.06, 0);
     }
@@ -98,29 +91,24 @@ function createDirtTexture() {
 const dirtTexture = createDirtTexture();
 
 function createGridPlatforms() {
-    // Очищаем старые ячейки перед перегенерацией (при ресайзе)
     clickableCells.forEach(cell => scene.remove(cell));
     clickableCells = [];
 
     const size = 1; 
     for (let x = 0; x < 8; x++) {
         for (let z = 0; z < 8; z++) {
-            // Платформа 1 (Игрок 1 / Своё поле)
             const geo1 = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
             const mat1 = new THREE.MeshStandardMaterial({ map: dirtTexture, color: 0xffffff, roughness: 0.9 });
             const cell1 = new THREE.Mesh(geo1, mat1);
             
-            // Платформа 2 (Игрок 2 / Вражеское поле)
             const geo2 = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
             const mat2 = new THREE.MeshStandardMaterial({ map: dirtTexture, color: 0xcccccc, roughness: 0.9 });
             const cell2 = new THREE.Mesh(geo2, mat2);
 
             if (isMobile) {
-                // На мобилке: p1 снизу, p2 сверху
                 cell1.position.set(x - 3.5, 0, z - 3.5 + 5);
                 cell2.position.set(x - 3.5, 0, z - 3.5 - 5);
             } else {
-                // На ПК: p1 слева, p2 справа
                 cell1.position.set(x - 3.5 - 5, 0, z - 3.5);
                 cell2.position.set(x - 3.5 + 5, 0, z - 3.5);
             }
@@ -136,25 +124,20 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- ОТОБРАЖЕНИЕ САУ ---
+// --- ОТОБРАЖЕНИЕ САУ (С ЗАЩИТОЙ ОТ ПУСТОГО ЭКРАНА) ---
 function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     const group = new THREE.Group();
     
-    // Рассчитываем мировые координаты в зависимости от экрана
     let worldX, worldZ;
     if (isMobile) {
         const offsetZ = (owner === 'p1') ? 5 : -5;
         worldX = gridX - 3.5;
         worldZ = gridY - 3.5 + offsetZ;
-        
-        // Разворот дула на мобилке: p1 (снизу) смотрит вверх (вдоль оси -Z), p2 (сверху) смотрит вниз (+Z)
         group.rotation.y = (owner === 'p1') ? Math.PI : 0;
     } else {
         const offsetX = (owner === 'p1') ? -5 : 5;
         worldX = gridX - 3.5 + offsetX;
         worldZ = gridY - 3.5;
-        
-        // Разворот на ПК: налево или направо
         group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
     }
 
@@ -162,6 +145,25 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     scene.add(group);
     visualUnits[id] = group;
 
+    // 1. ОТРИСОВКА МАРКЕРА И ЗАГЛУШКИ (Появятся МГНОВЕННО)
+    const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
+    ringGeo.rotateX(-Math.PI / 2); 
+    const ringMat = new THREE.MeshBasicMaterial({ 
+        color: isDestroyed ? 0x444444 : color, 
+        side: THREE.DoubleSide 
+        // На мобилках приподнимем кольцо чуть выше, чтобы не мерцало поверх земли
+    });
+    ring.position.y = 0.02; 
+    group.add(ring);
+
+    // Временный куб, чтобы поле не пустовало, пока грузится тяжелый .glb файл
+    const placeholderGeo = new THREE.BoxGeometry(0.4, 0.3, 0.4);
+    const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x222222 : color });
+    const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
+    placeholder.position.y = 0.15;
+    group.add(placeholder);
+
+    // 2. АСИНХРОННАЯ ЗАГРУЗКА 3D МОДЕЛИ С СЕРВЕРА
     gltfLoader.load('/models/sau.glb', (gltf) => {
         const model = gltf.scene;
         model.traverse((child) => {
@@ -177,21 +179,13 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
 
         model.scale.set(0.4, 0.4, 0.4);
         model.position.set(0, 0, 0);
+        
+        // Модель успешно загрузилась! Удаляем куб-заглушку и ставим САУ
+        group.remove(placeholder);
         group.add(model);
 
-        // Кольцо-индикатор под САУ
-        const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
-        ringGeo.rotateX(-Math.PI / 2); 
-        const ringMat = new THREE.MeshBasicMaterial({ 
-            color: isDestroyed ? 0x444444 : color, 
-            side: THREE.DoubleSide 
-        });
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.position.y = 0.02; 
-        group.add(ring);
-
     }, undefined, (error) => {
-        console.error('Ошибка загрузки модели САУ:', error);
+        console.error('Ошибка загрузки /models/sau.glb. Проверьте регистр букв названия файла на GitHub!', error);
     });
 }
 
@@ -386,7 +380,6 @@ function renderUnits() {
         p1.units.forEach((unit, index) => {
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
             
-            // Сохраняем координаты огня подбитых юнитов
             if (unit.destroyed) {
                 let worldX, worldZ;
                 if (isMobile) {
@@ -436,9 +429,8 @@ function animate() {
 }
 animate();
 
-// --- АДАПТИВНОСТЬ ПРИ ИЗМЕНЕНИИ ЭКРАНА / ПОВОРОТЕ ТЕЛЕФОНА ---
+// --- АДАПТИВНОСТЬ И СМЕНА РЕЖИМОВ ЭКРАНА ---
 window.addEventListener('resize', () => {
-    // Перепроверяем тип устройства (например, если перевернули планшет)
     const currentMobileState = isMobileDevice();
     if (currentMobileState !== isMobile) {
         isMobile = currentMobileState;
