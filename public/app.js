@@ -43,10 +43,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.75); 
+// Добавим немного интенсивности свету, чтобы модель точно не была черной
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.9); 
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-dirLight.position.set(10, 20, 10);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(10, 25, 10);
 scene.add(dirLight);
 
 // --- СОЗДАНИЕ СЕТОК (РАЗМЕТКА) ---
@@ -124,7 +125,7 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- ОТОБРАЖЕНИЕ САУ (ИСПРАВЛЕНО!) ---
+// --- ОТОБРАЖЕНИЕ САУ (ИСПРАВЛЕНЫ МАТЕРИАЛЫ И ОТОБРАЖЕНИЕ 3D) ---
 function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -145,7 +146,7 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     scene.add(group);
     visualUnits[id] = group;
 
-    // 1. ОТРИСОВКА МАРКЕРА И ЗАГЛУШКИ (Теперь без синтаксических ошибок, появятся мгновенно)
+    // Отрисовка цветного кольца-маркера на земле (оно останется всегда)
     const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
@@ -156,36 +157,42 @@ function createVisualUnit(id, gridX, gridY, color, isDestroyed, owner) {
     ring.position.y = 0.02; 
     group.add(ring);
 
-    // Временный куб, чтобы поле гарантированно не пустовало
+    // Временный куб-заглушка
     const placeholderGeo = new THREE.BoxGeometry(0.4, 0.3, 0.4);
     const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x222222 : color });
     const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
     placeholder.position.y = 0.15;
     group.add(placeholder);
 
-    // 2. АСИНХРОННАЯ ЗАГРУЗКА 3D МОДЕЛИ С СЕРВЕРА
+    // АСИНХРОННАЯ ЗАГРУЗКА 3D МОДЕЛИ
     gltfLoader.load('/models/sau.glb', (gltf) => {
         const model = gltf.scene;
+        
         model.traverse((child) => {
             if (child.isMesh) {
                 child.castShadow = true;
                 child.receiveShadow = true;
+                
+                // Если юнит уничтожен — делаем его полупрозрачным черным, не ломая структуру материала
                 if (isDestroyed) {
-                    child.material.color.setHex(0x222222);
-                    child.material.roughness = 0.9; 
+                    if (child.material) {
+                        child.material.transparent = true;
+                        child.material.opacity = 0.4;
+                    }
                 }
             }
         });
 
+        // Корректируем масштаб (если модель слишком маленькая или большая, можно поменять этот параметр)
         model.scale.set(0.4, 0.4, 0.4);
         model.position.set(0, 0, 0);
         
-        // Удаляем временный куб и ставим модель САУ
+        // УДАЛЯЕМ КУБ ТОЛЬКО ПОСЛЕ УСПЕШНОЙ ПОДГРУЗКИ МОДЕЛИ
         group.remove(placeholder);
         group.add(model);
 
     }, undefined, (error) => {
-        console.error('Ошибка загрузки /models/sau.glb:', error);
+        console.error('Ошибка загрузки 3D модели:', error);
     });
 }
 
