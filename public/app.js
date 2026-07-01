@@ -1,6 +1,6 @@
 const socket = io();
 
-// --- СОСТОЯНИЕ ИГРЫ ---
+// --- GAME STATE ---
 let myRole = null;          
 let myId = null;            
 let gameState = null;       
@@ -11,19 +11,19 @@ const particles = [];
 const burningUnitsPositions = []; 
 
 const gltfLoader = new THREE.GLTFLoader();
-let sauModelTemplate = null; // Шаблон модели в памяти
-let sauCenterOffset = new THREE.Vector3(); // Запоминаем сдвиг центра для точного позиционирования
+let sauModelTemplate = null; 
+let sauCenterOffset = new THREE.Vector3(); 
 
-// --- НАСТРОЙКА THREE.JS ---
+// --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xF5F2EB);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// Камера теперь всегда смотрит на вертикально расположенные поля
+// Слегка отодвинули камеру назад (z: 13), чтобы поле ушло вверх и не перекрывалось кнопками
 function updateCameraPosition() {
-    camera.position.set(0, 18, 11); 
+    camera.position.set(0, 18, 13); 
     camera.lookAt(0, 0, 0);
 }
 updateCameraPosition();
@@ -39,12 +39,11 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
 dirLight.position.set(15, 30, 10);
 scene.add(dirLight);
 
-// --- СОЗДАНИЕ СЕТОК (РАЗМЕТКА) ---
+// --- GRID PLATFORMS ---
 const gridHelperLeft = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
 const gridHelperRight = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
 
 function positionGridHelpers() {
-    // Размещение полей по вертикали: ближнее (снизу) и дальнее (сверху)
     gridHelperLeft.position.set(0, 0.06, 5);
     gridHelperRight.position.set(0, 0.06, -5);
 }
@@ -91,7 +90,6 @@ function createGridPlatforms() {
             const mat2 = new THREE.MeshStandardMaterial({ map: dirtTexture, color: 0xcccccc, roughness: 0.9 });
             const cell2 = new THREE.Mesh(geo2, mat2);
 
-            // Позиционируем ячейки строго по оси Z (ближнее и дальнее поля)
             cell1.position.set(x - 3.5, 0, z - 3.5 + 5);
             cell2.position.set(x - 3.5, 0, z - 3.5 - 5);
 
@@ -106,7 +104,7 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- НАСТРОЙКА МАСШТАБА И ВЫЧИСЛЕНИЕ ЦЕНТРА ---
+// --- MODEL LOADING & CENTERING ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     
@@ -126,13 +124,13 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     sauCenterOffset.z = -center.z * scaleFactor;
     sauCenterOffset.y = -box.min.y * scaleFactor;
 
-    console.log("Модель загружена. Локальный центр выровнен.");
+    console.log("Model loaded. Center offset calculated.");
     if (gameState) renderUnits();
 }, undefined, (error) => {
-    console.error('Критическая ошибка предзагрузки модели:', error);
+    console.error('Error loading model:', error);
 });
 
-// --- ОТОБРАЖЕНИЕ С РОТАЦИЕЙ ДРУГ НА ДРУГА (ВВЕРХ / ВНИЗ) ---
+// --- RENDER VISUAL UNITS ---
 function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -140,14 +138,13 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const worldX = gridX - 3.5;
     const worldZ = gridY - 3.5 + offsetZ;
     
-    // p1 (снизу) смотрит вперед/вверх на врага. p2 (сверху) смотрит назад/вниз.
+    // Facing each other (p1 looks up, p2 looks down)
     group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
 
     group.position.set(worldX, 0, worldZ);
     scene.add(group);
     visualUnits[id] = group;
 
-    // Круг-маркер под танком
     const ringGeo = new THREE.RingGeometry(0.30, 0.36, 32); 
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
@@ -160,8 +157,6 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
 
     if (sauModelTemplate) {
         const model = sauModelTemplate.clone();
-        
-        // Модель центрируется локально и вращается строго по центру клетки
         model.position.set(sauCenterOffset.x, sauCenterOffset.y, sauCenterOffset.z);
         
         model.traverse((child) => {
@@ -246,7 +241,7 @@ function spawnFireAndSmoke() {
     });
 }
 
-// --- UI И КНОПКИ ---
+// --- UI BUTTONS & EVENT LISTENERS ---
 const btnFire = document.getElementById('btn-fire');
 const btnMove = document.getElementById('btn-move');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -267,7 +262,7 @@ btnMove.addEventListener('click', (e) => {
     btnFire.classList.remove('active');
 });
 
-// --- ОБРАБОТКА КЛИКОВ ---
+// --- RAYCASTING (CLICKS) ---
 window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
     if (!gameState) return;
@@ -325,9 +320,9 @@ window.addEventListener('click', (event) => {
     }
 });
 
-// --- СЕТЕВАЯ ЛОГИКА ---
+// --- NETWORK LOGIC ---
 socket.emit('joinGame');
-socket.on('waiting', (msg) => { turnIndicator.innerText = msg; });
+socket.on('waiting', (msg) => { turnIndicator.innerText = "Waiting for opponent..."; });
 
 socket.on('gameStart', (data) => {
     myRole = data.role;
@@ -357,16 +352,16 @@ socket.on('fireResult', (data) => {
 });
 
 socket.on('gameOver', (data) => {
-    alert(data.winner === myId ? "ПОБЕДА! Все САУ врага уничтожены!" : "ПОРАЖЕНИЕ! Ваши САУ уничтожены.");
+    alert(data.winner === myId ? "VICTORY! All enemy artillery destroyed!" : "DEFEAT! Your artillery was wiped out.");
     window.location.reload();
 });
 
 function updateTurnUI() {
     if (gameState.turn === myId) {
-        turnIndicator.innerText = "ТВОЙ ХОД!";
+        turnIndicator.innerText = "YOUR TURN!";
         turnIndicator.style.color = "#2ed573";
     } else {
-        turnIndicator.innerText = "ХОД СОПЕРНИКА...";
+        turnIndicator.innerText = "OPPONENT'S TURN...";
         turnIndicator.style.color = "#ff4757";
     }
 }
@@ -381,11 +376,8 @@ function renderUnits() {
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
-            
             if (unit.destroyed) {
-                const worldX = unit.x - 3.5; 
-                const worldZ = unit.y - 3.5 + 5;
-                burningUnitsPositions.push({ x: worldX, z: worldZ });
+                burningUnitsPositions.push({ x: unit.x - 3.5, z: unit.y - 3.5 + 5 });
             }
         });
     }
@@ -393,11 +385,8 @@ function renderUnits() {
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2');
-            
             if (unit.destroyed) {
-                const worldX = unit.x - 3.5; 
-                const worldZ = unit.y - 3.5 - 5;
-                burningUnitsPositions.push({ x: worldX, z: worldZ });
+                burningUnitsPositions.push({ x: unit.x - 3.5, z: unit.y - 3.5 - 5 });
             }
         });
     }
