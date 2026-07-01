@@ -10,6 +10,9 @@ const visualUnits = {};
 const particles = []; 
 const burningUnitsPositions = []; 
 
+// Инициализируем загрузчик 3D моделей
+const gltfLoader = new THREE.GLTFLoader();
+
 // --- НАСТРОЙКА THREE.JS ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
@@ -29,7 +32,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-// Нейтральные серые сетки
+// Нейтральные серые сетки (без цветных крестов)
 const gridHelperLeft = new THREE.GridHelper(8, 8, 0x888888, 0x888888);
 gridHelperLeft.position.set(-5, 0.06, 0);
 scene.add(gridHelperLeft);
@@ -88,45 +91,64 @@ function createGridPlatform(offsetX, isEnemy) {
 createGridPlatform(-5, false); 
 createGridPlatform(5, true);   
 
+// --- ЗАГРУЗКА РЕАЛИСТИЧНОЙ МОДЕЛИ САУ ---
 function createVisualUnit(id, x, z, color, isDestroyed, owner) {
+    // Создаем пустой контейнер, который сразу встает в нужную точку сетки
     const group = new THREE.Group();
+    group.position.set(x, 0, z);
     
-    const baseColor = isDestroyed ? 0x222222 : color;
-    const cabinColor = isDestroyed ? 0x111111 : 0x333333;
-
-    const baseGeo = new THREE.BoxGeometry(0.7, 0.2, 0.7);
-    const baseMat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.4 });
-    const base = new THREE.Mesh(baseGeo, baseMat);
-    base.position.y = 0.1;
-    group.add(base);
-
-    const cabinGeo = new THREE.BoxGeometry(0.4, 0.25, 0.4);
-    const cabinMat = new THREE.MeshStandardMaterial({ color: cabinColor, roughness: 0.5 });
-    const cabin = new THREE.Mesh(cabinGeo, cabinMat);
-    cabin.position.y = 0.325;
-    group.add(cabin);
-
-    // Геометрия дула
-    const barrelLength = 0.5;
-    const barrelGeo = new THREE.CylinderGeometry(0.05, 0.05, barrelLength);
-    const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-    const barrel = new THREE.Mesh(barrelGeo, barrelMat);
-    
-    // Выравниваем цилиндр по направлению вперед (Z) и задираем нос вверх
-    barrel.rotation.x = Math.PI / 2 - (isDestroyed ? 0.1 : 0.4); 
-    barrel.position.set(0, 0.35, barrelLength / 2);
-    group.add(barrel);
-
-    // Разворачиваем пушку на поле противника
+    // Поворачиваем САУ к центру карты (на поле противника)
+    // Если при первом тесте окажется, что модель из Tripo3D развернута задом или боком,
+    // мы просто скорректируем эти углы (например, поменяем знак или прибавим Math.PI)
     if (owner === 'p1') {
-        group.rotation.y = Math.PI / 2;  
+        group.rotation.y = Math.PI / 2;  // Синие (левые) смотрят направо
     } else {
-        group.rotation.y = -Math.PI / 2; 
+        group.rotation.y = -Math.PI / 2; // Красные (правые) смотрят налево
     }
 
-    group.position.set(x, 0, z);
     scene.add(group);
     visualUnits[id] = group;
+
+    // Асинхронно загружаем .glb файл САУ
+    gltfLoader.load('/models/sau.glb', (gltf) => {
+        const model = gltf.scene;
+
+        // Настройка PBR-материалов, сгенерированных нейросетью
+        model.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+
+                // Эффект уничтожения: если САУ подбита, делаем текстуру темной (обгоревшей сажей)
+                if (isDestroyed) {
+                    child.material.color.setHex(0x222222);
+                    child.material.roughness = 0.9; 
+                }
+            }
+        });
+
+        // Масштабирование: сжимаем модель под размеры нашей игровой ячейки (1x1 метр)
+        // Если САУ покажется слишком большой или маленькой, измени эти три значения
+        model.scale.set(0.4, 0.4, 0.4);
+        model.position.set(0, 0, 0);
+
+        // Добавляем готовую 3D-модель в наш контейнер на сцене
+        group.add(model);
+
+        // Цветной круг-маркер под САУ на земле, чтобы игроки четко понимали команды (Синие/Красные)
+        const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
+        ringGeo.rotateX(-Math.PI / 2); 
+        const ringMat = new THREE.MeshBasicMaterial({ 
+            color: isDestroyed ? 0x444444 : color, 
+            side: THREE.DoubleSide 
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.y = 0.02; 
+        group.add(ring);
+
+    }, undefined, (error) => {
+        console.error('Ошибка при загрузке 3D модели САУ:', error);
+    });
 }
 
 function createSplash(worldX, worldZ, type) {
@@ -290,7 +312,7 @@ socket.on('fireResult', (data) => {
 });
 
 socket.on('gameOver', (data) => {
-    alert(data.winner === myId ? "ПОБЕДА! Все пушки врага уничтожены!" : "ПОРАЖЕНИЕ! Ваши пушки уничтожены.");
+    alert(data.winner === myId ? "ПОБЕДА! Все САУ врага уничтожены!" : "ПОРАЖЕНИЕ! Ваши САУ уничтожены.");
     window.location.reload();
 });
 
@@ -305,6 +327,7 @@ function updateTurnUI() {
 }
 
 function renderUnits() {
+    // Удаляем предыдущие модели со сцены
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     burningUnitsPositions.length = 0; 
     
