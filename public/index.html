@@ -2,23 +2,147 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Artillery 2.5D</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Артиллерийская Дуэль 3D</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            background: rgba(255, 255, 255, 0.85);
+            padding: 15px 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        #turn-indicator {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 5px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            letter-spacing: 1px;
+        }
+
+        #timer-container {
+            font-size: 16px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        #timer {
+            font-size: 20px;
+            color: #222;
+            font-weight: 700;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 10px;
+            border-radius: 14px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        button {
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            pointer-events: auto;
+            border: none;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        #btn-fire {
+            background-color: #ff4757;
+            color: white;
+        }
+
+        #btn-fire:hover {
+            background-color: #ff6b81;
+            transform: translateY(-2px);
+        }
+
+        #btn-fire.active {
+            background-color: #ff1f35;
+            box-shadow: 0 0 15px rgba(255, 71, 87, 0.6);
+            transform: translateY(1px);
+        }
+
+        #btn-move {
+            background-color: #2ed573;
+            color: white;
+        }
+
+        #btn-move:hover {
+            background-color: #26af5f;
+            transform: translateY(-2px);
+        }
+
+        #btn-move.active {
+            background-color: #10ac84;
+            box-shadow: 0 0 15px rgba(46, 213, 115, 0.6);
+            transform: translateY(1px);
+        }
+    </style>
 </head>
 <body>
-    <div id="ui-container">
-        <div id="turn-indicator">Ожидание игроков...</div>
-        <div id="timer">9</div>
-        <div id="controls" class="hidden">
-            <button id="btn-fire" class="active">FIRE (Выстрел)</button>
-            <button id="btn-move">MOVE (Ход)</button>
-        </div>
-    </div>
 
     <div id="canvas-container"></div>
 
+    <div id="ui-layer">
+        <div id="turn-indicator">Подключение к игре...</div>
+        <div id="timer-container">Осталось времени: <span id="timer">--</span> сек</div>
+    </div>
+
+    <div id="controls" class="hidden">
+        <button id="btn-fire" class="active">Огонь (Выстрел)</button>
+        <button id="btn-move">Маневр (Ход)</button>
+    </div>
+
+    <!-- Подключение внешних библиотек -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Важно: Подключаем GLTFLoader для поддержки формата .glb/.gltf из Tripo3D -->
+    <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <!-- Основной клиентский скрипт -->
     <script src="app.js"></script>
 </body>
 </html>
