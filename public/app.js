@@ -126,7 +126,7 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- ПРАВИЛЬНАЯ НАСТРОЙКА МАСШТАБА И СДВИГА ПРИ ЗАГРУЗКЕ ---
+// --- НАСТРОЙКА МАСШТАБА (-25%) И ВЫЧИСЛЕНИЕ ЦЕНТРА ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     
@@ -135,27 +135,27 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     box.getSize(size);
     
     const maxDim = Math.max(size.x, size.y, size.z);
-    const targetSize = 2.0; 
+    // Уменьшили размер на 25% (было 2.0, стало 1.5)
+    const targetSize = 1.5; 
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
-    // Рассчитываем, насколько исходный центр модели смещен от нуля
+    // Рассчитываем геометрический центр исходной модели
     const center = new THREE.Vector3();
     box.getCenter(center);
     
-    // Сохраняем точный локальный сдвиг (умноженный на масштаб)
+    // Считаем локальное смещение с учетом нового масштаба
     sauCenterOffset.x = -center.x * scaleFactor;
     sauCenterOffset.z = -center.z * scaleFactor;
     sauCenterOffset.y = -box.min.y * scaleFactor;
 
-    console.log("Модель загружена. Сдвиг центра зафиксирован:", sauCenterOffset);
-    
+    console.log("Уменьшенная модель загружена. Сдвиг центра:", sauCenterOffset);
     if (gameState) renderUnits();
 }, undefined, (error) => {
     console.error('Критическая ошибка предзагрузки модели:', error);
 });
 
-// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ ВОЕННЫХ САУ СТРОГО ПО ЦЕНТРУ КЛЕТКИ ---
+// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ СТРОГО ПО ЦЕНТРУ КЛЕТКИ ---
 function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -172,12 +172,13 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
         group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
     }
 
+    // Базовая точка группы ставится ровно в центр клетки
     group.position.set(worldX, 0, worldZ);
     scene.add(group);
     visualUnits[id] = group;
 
     // Круг-маркер под танком
-    const ringGeo = new THREE.RingGeometry(0.38, 0.45, 32);
+    const ringGeo = new THREE.RingGeometry(0.30, 0.36, 32); // Чуть уменьшили кольцо под размер модели
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
         color: isDestroyed ? 0x222222 : ringColor, 
@@ -190,13 +191,13 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     if (sauModelTemplate) {
         const model = sauModelTemplate.clone();
         
-        // Корректируем позицию клона внутри группы в зависимости от поворота стороны!
+        // Корректируем локальное смещение клона, центрируя его относительно родительской группы
         if (isMobile) {
             model.position.x = sauCenterOffset.x;
             model.position.y = sauCenterOffset.y;
             model.position.z = (owner === 'p1') ? -sauCenterOffset.z : sauCenterOffset.z;
         } else {
-            // Для десктопа: меняем знак по оси Z в зависимости от направления разворота игрока
+            // Для десктопа переворачиваем смещение по оси Z в зависимости от направления взгляда игрока
             model.position.x = (owner === 'p1') ? -sauCenterOffset.z : sauCenterOffset.z;
             model.position.y = sauCenterOffset.y;
             model.position.z = sauCenterOffset.x;
@@ -226,12 +227,12 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
         
         group.add(model);
     } else {
-        const placeholderGeo = new THREE.BoxGeometry(0.7, 0.4, 0.7);
+        const placeholderGeo = new THREE.BoxGeometry(0.5, 0.3, 0.5);
         const placeholderMat = new THREE.MeshStandardMaterial({ 
             color: isDestroyed ? 0x2b2e18 : 0x4B5320 
         });
         const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
-        placeholder.position.y = 0.2;
+        placeholder.position.y = 0.15;
         group.add(placeholder);
     }
 }
