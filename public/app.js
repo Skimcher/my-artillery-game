@@ -11,7 +11,8 @@ const particles = [];
 const burningUnitsPositions = []; 
 
 const gltfLoader = new THREE.GLTFLoader();
-let sauModelTemplate = null; // Шаблон модели в памяти для мгновенного клонирования
+let sauModelTemplate = null; // Шаблон модели в памяти
+let sauCenterOffset = new THREE.Vector3(); // Запоминаем сдвиг центра для точного позиционирования
 
 // --- ПРОВЕРКА НА МОБИЛЬНОЕ УСТРОЙСТВО ---
 function isMobileDevice() {
@@ -44,7 +45,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
-// Настройка правильного военного освещения
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.85); 
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -126,43 +126,36 @@ function createGridPlatforms() {
 }
 createGridPlatforms();
 
-// --- ИДЕАЛЬНОЕ ЦЕНТРИРОВАНИЕ ГЕОМЕТРИИ МОДЕЛИ ОДИН РАЗ ПРИ ЗАГРУЗКЕ ---
+// --- ПРАВИЛЬНАЯ НАСТРОЙКА МАСШТАБА И СДВИГА ПРИ ЗАГРУЗКЕ ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     
-    // Сначала принудительно сбрасываем локальные позиции мешей, центрируя их геометрию внутренне
-    sauModelTemplate.traverse((child) => {
-        if (child.isMesh && child.geometry) {
-            child.geometry.center(); // Сдвигает Pivot Point геометрии строго в её центр!
-        }
-    });
-
-    // Теперь измеряем чистые габариты получившейся отцентрированной модели
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
     const size = new THREE.Vector3();
     box.getSize(size);
     
     const maxDim = Math.max(size.x, size.y, size.z);
-    
-    // Наш увеличенный гигантский размер
     const targetSize = 2.0; 
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
-    // Обнуляем позиции шаблона. Теперь модель гарантированно вращается вокруг своей оси симметрии!
-    sauModelTemplate.position.set(0, 0, 0);
+    // Рассчитываем, насколько исходный центр модели смещен от нуля
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    
+    // Сохраняем точный локальный сдвиг (умноженный на масштаб)
+    sauCenterOffset.x = -center.x * scaleFactor;
+    sauCenterOffset.z = -center.z * scaleFactor;
+    sauCenterOffset.y = -box.min.y * scaleFactor;
 
-    // Приподнимем её чуть-чуть, чтобы гусеницы стояли ровно на земле, зная высоту
-    const updatedBox = new THREE.Box3().setFromObject(sauModelTemplate);
-    sauModelTemplate.position.y = -updatedBox.min.y;
-
-    console.log("Мастер-модель с идеальным центром закеширована.");
+    console.log("Модель загружена. Сдвиг центра зафиксирован:", sauCenterOffset);
+    
     if (gameState) renderUnits();
 }, undefined, (error) => {
     console.error('Критическая ошибка предзагрузки модели:', error);
 });
 
-// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ ВОЕННЫХ САУ СТРОГО ПО ЦЕНТРУ ЯЧЕЕК ---
+// --- СИНХРОННОЕ ОТОБРАЖЕНИЕ ВОЕННЫХ САУ СТРОГО ПО ЦЕНТРУ КЛЕТКИ ---
 function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     const group = new THREE.Group();
     
@@ -176,7 +169,6 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
         const offsetX = (owner === 'p1') ? -5 : 5;
         worldX = gridX - 3.5 + offsetX;
         worldZ = gridY - 3.5;
-        // Поворот теперь будет работать идеально, так как ось вращения строго по центру танка
         group.rotation.y = (owner === 'p1') ? Math.PI / 2 : -Math.PI / 2;
     }
 
@@ -184,7 +176,7 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     scene.add(group);
     visualUnits[id] = group;
 
-    // Цветной маркер команды на земле
+    // Круг-маркер под танком
     const ringGeo = new THREE.RingGeometry(0.38, 0.45, 32);
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ 
@@ -198,6 +190,18 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
     if (sauModelTemplate) {
         const model = sauModelTemplate.clone();
         
+        // Корректируем позицию клона внутри группы в зависимости от поворота стороны!
+        if (isMobile) {
+            model.position.x = sauCenterOffset.x;
+            model.position.y = sauCenterOffset.y;
+            model.position.z = (owner === 'p1') ? -sauCenterOffset.z : sauCenterOffset.z;
+        } else {
+            // Для десктопа: меняем знак по оси Z в зависимости от направления разворота игрока
+            model.position.x = (owner === 'p1') ? -sauCenterOffset.z : sauCenterOffset.z;
+            model.position.y = sauCenterOffset.y;
+            model.position.z = sauCenterOffset.x;
+        }
+        
         model.traverse((child) => {
             if (child.isMesh) {
                 child.castShadow = true;
@@ -205,7 +209,7 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
                 
                 if (!isDestroyed) {
                     child.material = new THREE.MeshStandardMaterial({
-                        color: 0x4B5320, // Хаки брони
+                        color: 0x4B5320, 
                         roughness: 0.7,   
                         metalness: 0.15
                     });
