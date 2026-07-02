@@ -199,10 +199,8 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
                 child.castShadow = true;
                 child.receiveShadow = true;
                 if (!isDestroyed) {
-                    // Мягкий неяркий песочно-желтый оттенок
                     child.material = new THREE.MeshStandardMaterial({ color: 0xbfa37a, roughness: 0.75, metalness: 0.1 });
                 } else {
-                    // Обгоревший темный оттенок для уничтоженной техники
                     child.material = new THREE.MeshStandardMaterial({ color: 0x423829, roughness: 0.95, transparent: true, opacity: 0.45 });
                 }
             }
@@ -377,8 +375,42 @@ socket.on('gameStateUpdate', (newState) => {
     renderUnits();
 });
 
+// ОБРАБОТКА РЕЗУЛЬТАТА ВЫСТРЕЛА С ВСПЛЕСКОМ И ЯМКАМИ
 socket.on('fireResult', (data) => {
+    // 1. Оставляем всплеск земли (частицы земли/песка взлетают)
     createSplash(data.x, data.y, data.targetRole, data.result);
+
+    // 2. Если зафиксирован промах, рендерим ямку
+    if (data.result === 'miss') {
+        const offsetZ = (data.targetRole === 'p1') ? 5 : -5;
+        const worldX = data.x - 3.5;
+        const worldZ = data.y - 3.5 + offsetZ;
+
+        // Геометрия круглого диска для ямки
+        const holeGeo = new THREE.RingGeometry(0, 0.25, 32); 
+        holeGeo.rotateX(-Math.PI / 2); 
+
+        // Матовый угольно-черный материал с небольшой прозрачностью
+        const holeMat = new THREE.MeshBasicMaterial({
+            color: 0x111111,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.8
+        });
+
+        const holeMesh = new THREE.Mesh(holeGeo, holeMat);
+        
+        // Высота 0.07 защищает от графического мерцания текстур
+        holeMesh.position.set(worldX, 0.07, worldZ);
+        scene.add(holeMesh);
+
+        // Ровно через 2 секунды ямка бесследно удаляется
+        setTimeout(() => {
+            scene.remove(holeMesh);
+            holeGeo.dispose(); 
+            holeMat.dispose(); 
+        }, 2000);
+    }
 });
 
 socket.on('gameOver', (data) => {
@@ -413,7 +445,6 @@ function renderUnits() {
 
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
-            // ИСПРАВЛЕНИЕ: если пушка скрыта за маской (-1), то просто пропускаем её отрисовку
             if (unit.x === -1 || unit.y === -1) return;
 
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
@@ -425,7 +456,6 @@ function renderUnits() {
 
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
-            // ИСПРАВЛЕНИЕ: если пушка скрыта за маской (-1), то просто пропускаем её отрисовку
             if (unit.x === -1 || unit.y === -1) return;
 
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2');
