@@ -89,7 +89,6 @@ io.on('connection', (socket) => {
 
     // Обработка отключения игрока из очереди
     socket.on('disconnect', () => {
-        console.log(`Игрок отключился: ${socket.id}`);
         if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
             clearInterval(waitingPlayer.interval);
             waitingPlayer = null;
@@ -133,7 +132,7 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('fireResult', { result: 'miss', x: data.x, y: data.y, targetRole: enemyPlayer.role });
             }
             
-            // После выстрела отправляем обновленное замаскированное состояние игрокам
+            // После выстрела отправляем обновленное замаскированное состояние игрокам и переключаем ход
             sendMaskedStateToAll(room);
             switchTurn(room);
         }
@@ -144,7 +143,7 @@ io.on('connection', (socket) => {
                 unit.x = data.x;
                 unit.y = data.y;
                 
-                // Отправляем замаскированное состояние после перемещения
+                // Отправляем замаскированное состояние после перемещения и переключаем ход
                 sendMaskedStateToAll(room);
                 switchTurn(room);
             }
@@ -187,9 +186,15 @@ function sendMaskedStateToAll(room) {
     io.to(room.players.p2.id).emit('gameStateUpdate', stateForP2);
 }
 
-// Функция маскировки состояния комнаты (Туман войны)
+// Безопасная функция маскировки состояния (Исключен краш из-за системного таймера)
 function getMaskedState(room, role) {
-    const state = JSON.parse(JSON.stringify(room));
+    // Копируем только безопасные для JSON данные игры, полностью игнорируя системный room.interval
+    const state = {
+        turn: room.turn,
+        timer: room.timer,
+        roomId: room.roomId,
+        players: JSON.parse(JSON.stringify(room.players))
+    };
     
     if (role === 'p1') {
         // Для p1 прячем живые пушки игрока p2
