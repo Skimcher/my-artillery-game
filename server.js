@@ -32,19 +32,19 @@ io.on('connection', (socket) => {
         if (!waitingPlayer) {
             const roomId = 'room_' + socket.id;
             
-            // ДОБАВЛЕНО: Запускаем таймер ожидания на 300 секунд (5 минут)
+            // Таймер ожидания соперника на 300 секунд (5 минут)
             let waitingTimerValue = 300;
             
             const waitingInterval = setInterval(() => {
                 waitingTimerValue--;
                 
-                // Отправляем текущие секунды клиенту, чтобы он красиво их выводил
+                // Отправляем текущие секунды клиенту
                 socket.emit('timerUpdate', waitingTimerValue);
                 
                 // Если за 5 минут никто не пришел, убираем игрока из очереди
                 if (waitingTimerValue <= 0) {
                     clearInterval(waitingInterval);
-                    socket.emit('gameOver', { winner: null }); // Сигнал клиенту, что время вышло
+                    socket.emit('gameOver', { winner: null }); 
                     if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
                         waitingPlayer = null;
                         console.log(`Время ожидания в комнате ${roomId} истекло.`);
@@ -55,7 +55,7 @@ io.on('connection', (socket) => {
             waitingPlayer = { socket, roomId, interval: waitingInterval };
             socket.join(roomId);
             socket.emit('waiting', 'Ожидание соперника...');
-            socket.emit('timerUpdate', waitingTimerValue); // Сразу шлем 300 секунд
+            socket.emit('timerUpdate', waitingTimerValue); 
             
         } else {
             // Оппонент нашелся! Очищаем таймер ожидания перед стартом игры
@@ -79,6 +79,7 @@ io.on('connection', (socket) => {
                 roomId: roomId
             };
 
+            // Отправляем замаскированное состояние (туман войны) при старте игры
             player1.emit('gameStart', { role: 'p1', state: getMaskedState(rooms[roomId], 'p1') });
             player2.emit('gameStart', { role: 'p2', state: getMaskedState(rooms[roomId], 'p2') });
 
@@ -86,7 +87,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Обработка отключения игрока (чтобы очистить очередь, если он просто закрыл вкладку)
+    // Обработка отключения игрока из очереди
     socket.on('disconnect', () => {
         console.log(`Игрок отключился: ${socket.id}`);
         if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
@@ -132,7 +133,8 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('fireResult', { result: 'miss', x: data.x, y: data.y, targetRole: enemyPlayer.role });
             }
             
-            // После выстрела переключаем ход
+            // После выстрела отправляем обновленное замаскированное состояние игрокам
+            sendMaskedStateToAll(room);
             switchTurn(room);
         }
         
@@ -142,13 +144,8 @@ io.on('connection', (socket) => {
                 unit.x = data.x;
                 unit.y = data.y;
                 
-                io.to(roomId).emit('gameStateUpdate', {
-                    players: {
-                        p1: getMaskedState(room, 'p1').players.p1,
-                        p2: getMaskedState(room, 'p2').players.p2
-                    }
-                });
-                
+                // Отправляем замаскированное состояние после перемещения
+                sendMaskedStateToAll(room);
                 switchTurn(room);
             }
         }
@@ -170,7 +167,7 @@ function startGameTimer(roomId) {
 }
 
 function switchTurn(room) {
-    room.timer = 9; // Время на ход остается 9 секунд
+    room.timer = 9; // Время на ход — 9 секунд
     const p1Id = room.players.p1.id;
     const p2Id = room.players.p2.id;
     room.turn = (room.turn === p1Id) ? p2Id : p1Id;
@@ -181,9 +178,30 @@ function switchTurn(room) {
     });
 }
 
+// Функция для раздельной отправки замаскированного состояния игрокам
+function sendMaskedStateToAll(room) {
+    const stateForP1 = getMaskedState(room, 'p1');
+    const stateForP2 = getMaskedState(room, 'p2');
+    
+    io.to(room.players.p1.id).emit('gameStateUpdate', stateForP1);
+    io.to(room.players.p2.id).emit('gameStateUpdate', stateForP2);
+}
+
+// Функция маскировки состояния комнаты (Туман войны)
 function getMaskedState(room, role) {
-    // Простая маскировка состояния, чтобы игроки не видели скрытые позиции друг друга
     const state = JSON.parse(JSON.stringify(room));
+    
+    if (role === 'p1') {
+        // Для p1 прячем живые пушки игрока p2
+        state.players.p2.units = state.players.p2.units.map(u => {
+            return u.destroyed ? u : { x: -1, y: -1, destroyed: false };
+        });
+    } else if (role === 'p2') {
+        // Для p2 прячем живые пушки игрока p1
+        state.players.p1.units = state.players.p1.units.map(u => {
+            return u.destroyed ? u : { x: -1, y: -1, destroyed: false };
+        });
+    }
     return state;
 }
 
