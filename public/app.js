@@ -86,47 +86,51 @@ positionGridHelpers();
 
 let clickableCells = [];
 
-function createDirtTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#5c4033';
-    ctx.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 800; i++) {
-        const x = Math.random() * 128;
-        const y = Math.random() * 128;
-        const size = 1 + Math.random() * 2;
-        ctx.fillStyle = Math.random() > 0.5 ? '#4a3329' : '#6e4e3f';
-        ctx.fillRect(x, y, size, size);
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    return texture;
-}
-
-const dirtTexture = createDirtTexture();
+// --- ЗАГРУЗКА ЕДИНОЙ ФОТОТЕКСТУРЫ ---
+const textureLoader = new THREE.TextureLoader();
+const battlefieldTexture = textureLoader.load('/assets/battlefield.jpg');
 
 function createGridPlatforms() {
+    // Очищаем старые ячейки, если они были
     clickableCells.forEach(cell => scene.remove(cell));
     clickableCells = [];
 
+    // 1. СОЗДАЕМ ДВЕ БОЛЬШИЕ ПЛАТФОРМЫ (ВИЗУАЛЬНОЕ ПОЛЕ БОЯ)
+    const fieldGeometry = new THREE.BoxGeometry(8, 0.1, 8);
+    
+    const fieldMaterial = new THREE.MeshStandardMaterial({ 
+        map: battlefieldTexture,
+        roughness: 0.8,
+        metalness: 0.1
+    });
+
+    const visualField1 = new THREE.Mesh(fieldGeometry, fieldMaterial);
+    const visualField2 = new THREE.Mesh(fieldGeometry, fieldMaterial);
+
+    visualField1.position.set(0, 0, 5);
+    visualField2.position.set(0, 0, -5);
+
+    scene.add(visualField1);
+    scene.add(visualField2);
+
+    // 2. СОЗДАЕМ НЕВИДИМУЮ СЕТКУ ДЛЯ КЛИКОВ (RAYCASTING)
     const size = 1; 
+    const invisibleMaterial = new THREE.MeshBasicMaterial({
+        visible: false // Невидимки ловящие клики
+    });
+
     for (let x = 0; x < 8; x++) {
         for (let z = 0; z < 8; z++) {
-            const geo1 = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
-            const mat1 = new THREE.MeshStandardMaterial({ map: dirtTexture, color: 0xffffff, roughness: 0.9 });
-            const cell1 = new THREE.Mesh(geo1, mat1);
+            const geo1 = new THREE.BoxGeometry(size, 0.2, size);
+            const cell1 = new THREE.Mesh(geo1, invisibleMaterial);
             
-            const geo2 = new THREE.BoxGeometry(size - 0.02, 0.1, size - 0.02);
-            const mat2 = new THREE.MeshStandardMaterial({ map: dirtTexture, color: 0xcccccc, roughness: 0.9 });
-            const cell2 = new THREE.Mesh(geo2, mat2);
+            const geo2 = new THREE.BoxGeometry(size, 0.2, size);
+            const cell2 = new THREE.Mesh(geo2, invisibleMaterial);
 
-            cell1.position.set(x - 3.5, 0, z - 3.5 + 5);
-            cell2.position.set(x - 3.5, 0, z - 3.5 - 5);
+            cell1.position.set(x - 3.5, 0.05, z - 3.5 + 5);
+            cell2.position.set(x - 3.5, 0.05, z - 3.5 - 5);
 
-            // Сохраняем только координаты ячейки внутри ее сетки
+            // Сохраняем логические координаты для сервера
             cell1.userData = { gridX: x, gridY: z };
             cell2.userData = { gridX: x, gridY: z };
 
@@ -320,7 +324,6 @@ window.addEventListener('click', (event) => {
             const aliveUnits = targetUnits.filter(u => !u.destroyed);
             if (aliveUnits.length === 0) return;
 
-            // Находим ближайшего к клику живого юнита, чтобы сдвинуть именно его
             let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
             if (aliveUnits.length > 1) {
                 const dist0 = Math.abs(aliveUnits[0].x - gridX) + Math.abs(aliveUnits[0].y - gridY);
