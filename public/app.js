@@ -199,10 +199,10 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
                 child.castShadow = true;
                 child.receiveShadow = true;
                 if (!isDestroyed) {
-                    // ИЗМЕНЕНО: Неяркий песочно-желтый цвет (военный маскировочный тан)
+                    // Мягкий неяркий песочно-желтый оттенок
                     child.material = new THREE.MeshStandardMaterial({ color: 0xbfa37a, roughness: 0.75, metalness: 0.1 });
                 } else {
-                    // ИЗМЕНЕНО: Обгоревший, потемневший полупрозрачный песочный для подбитых пушек
+                    // Обгоревший темный оттенок для уничтоженной техники
                     child.material = new THREE.MeshStandardMaterial({ color: 0x423829, roughness: 0.95, transparent: true, opacity: 0.45 });
                 }
             }
@@ -413,6 +413,9 @@ function renderUnits() {
 
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
+            // ИСПРАВЛЕНИЕ: если пушка скрыта за маской (-1), то просто пропускаем её отрисовку
+            if (unit.x === -1 || unit.y === -1) return;
+
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
             if (unit.destroyed) {
                 burningUnitsPositions.push({ x: unit.x - 3.5, z: unit.y - 3.5 + 5 });
@@ -422,6 +425,9 @@ function renderUnits() {
 
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
+            // ИСПРАВЛЕНИЕ: если пушка скрыта за маской (-1), то просто пропускаем её отрисовку
+            if (unit.x === -1 || unit.y === -1) return;
+
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2');
             if (unit.destroyed) {
                 burningUnitsPositions.push({ x: unit.x - 3.5, z: unit.y - 3.5 - 5 });
