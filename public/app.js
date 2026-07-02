@@ -199,16 +199,18 @@ function createVisualUnit(id, gridX, gridY, ringColor, isDestroyed, owner) {
                 child.castShadow = true;
                 child.receiveShadow = true;
                 if (!isDestroyed) {
-                    child.material = new THREE.MeshStandardMaterial({ color: 0x4B5320, roughness: 0.7, metalness: 0.15 });
+                    // ИЗМЕНЕНО: Неяркий песочно-желтый цвет (военный маскировочный тан)
+                    child.material = new THREE.MeshStandardMaterial({ color: 0xbfa37a, roughness: 0.75, metalness: 0.1 });
                 } else {
-                    child.material = new THREE.MeshStandardMaterial({ color: 0x2b2e18, roughness: 0.95, transparent: true, opacity: 0.45 });
+                    // ИЗМЕНЕНО: Обгоревший, потемневший полупрозрачный песочный для подбитых пушек
+                    child.material = new THREE.MeshStandardMaterial({ color: 0x423829, roughness: 0.95, transparent: true, opacity: 0.45 });
                 }
             }
         });
         group.add(model);
     } else {
         const placeholderGeo = new THREE.BoxGeometry(0.5, 0.3, 0.5);
-        const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x2b2e18 : 0x4B5320 });
+        const placeholderMat = new THREE.MeshStandardMaterial({ color: isDestroyed ? 0x423829 : 0xbfa37a });
         const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
         placeholder.position.y = 0.15;
         group.add(placeholder);
