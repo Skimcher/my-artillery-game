@@ -19,6 +19,7 @@ let sauCenterOffset = new THREE.Vector3();
 const FIELD_SIZE = 25;       
 const DIRECT_RADIUS = 2.25;  // Первый критический радиус (черный кружок)
 const SPLASH_RADIUS = 6;     // Второй радиус осколков (серый кружок)
+const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра (было 15, уменьшили чтобы влезало на экраны)
 
 // --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container');
@@ -67,14 +68,13 @@ function createFieldOutline() {
     return { line1, line2 };
 }
 const outlines = createFieldOutline();
-outlines.line1.position.set(0, 0.06, 15); 
-outlines.line2.position.set(0, 0.06, -15); 
+outlines.line1.position.set(0, 0.06, FIELD_OFFSET_Z); 
+outlines.line2.position.set(0, 0.06, -FIELD_OFFSET_Z); 
 scene.add(outlines.line1, outlines.line2);
 
 let fieldClickPlanes = [];
 
 // --- СОЗДАНИЕ ПЛАТФОРМ ---
-// Загружаем текстуру и НЕ дублируем её, чтобы она растянулась на весь меш
 const battlefieldTexture = textureLoader.load('/assets/battlefield.jpg');
 
 function createBattlefields() {
@@ -84,8 +84,8 @@ function createBattlefields() {
     const visualField1 = new THREE.Mesh(fieldGeometry, fieldMaterial);
     const visualField2 = new THREE.Mesh(fieldGeometry, fieldMaterial);
 
-    visualField1.position.set(0, 0, 15);
-    visualField2.position.set(0, 0, -15);
+    visualField1.position.set(0, 0, FIELD_OFFSET_Z);
+    visualField2.position.set(0, 0, -FIELD_OFFSET_Z);
     scene.add(visualField1, visualField2);
 
     const clickGeo = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE);
@@ -93,11 +93,11 @@ function createBattlefields() {
     const clickMat = new THREE.MeshBasicMaterial({ visible: false });
 
     const plane1 = new THREE.Mesh(clickGeo, clickMat);
-    plane1.position.set(0, 0.05, 15);
+    plane1.position.set(0, 0.05, FIELD_OFFSET_Z);
     plane1.userData = { targetRole: 'p1' };
 
     const plane2 = new THREE.Mesh(clickGeo, clickMat);
-    plane2.position.set(0, 0.05, -15);
+    plane2.position.set(0, 0.05, -FIELD_OFFSET_Z);
     plane2.userData = { targetRole: 'p2' };
 
     scene.add(plane1, plane2);
@@ -105,7 +105,7 @@ function createBattlefields() {
 }
 createBattlefields();
 
-// --- ЗАГРУЗКА МОДЕЛИ САУ (+15% = 3.45 МЕТРА) ---
+// --- ЗАГРУЗКА МОДЕЛИ САУ ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
@@ -130,7 +130,7 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
 function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, hp) {
     const group = new THREE.Group();
     
-    const offsetZ = (owner === 'p1') ? 15 : -15;
+    const offsetZ = (owner === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
     const worldX = serverX - (FIELD_SIZE / 2);
     const worldZ = serverY - (FIELD_SIZE / 2) + offsetZ;
     
@@ -193,7 +193,6 @@ function updateHpBarsPositions() {
         if (domEl && domEl.style.display !== 'none') {
             group.getWorldPosition(tempV);
             tempV.y += 2.2; 
-            
             tempV.project(camera);
             
             const x = (tempV.x * .5 + .5) * window.innerWidth;
@@ -208,7 +207,7 @@ function createSplash(serverX, serverY, targetRole, type) {
     const color = (type === 'hit' || type === 'splash') ? 0xffa500 : 0x5c4033; 
     const particleCount = 25;
 
-    const offsetZ = (targetRole === 'p1') ? 15 : -15;
+    const offsetZ = (targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
     const worldX = serverX - (FIELD_SIZE / 2);
     const worldZ = serverY - (FIELD_SIZE / 2) + offsetZ;
 
@@ -268,7 +267,7 @@ window.addEventListener('click', (event) => {
         const planeZ = hit.point.z;
         const clickedPlaneRole = hit.object.userData.targetRole;
 
-        const offsetZ = (clickedPlaneRole === 'p1') ? 15 : -15;
+        const offsetZ = (clickedPlaneRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
         const serverX = planeX + (FIELD_SIZE / 2);
         const serverY = planeZ + (FIELD_SIZE / 2) - offsetZ;
 
@@ -304,11 +303,10 @@ socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
 socket.on('turnChanged', (data) => { if (!gameState) return; gameState.turn = data.turn; timerDisplay.innerText = data.timer; hasDoneActionThisTurn = false; updateTurnUI(); });
 socket.on('gameStateUpdate', (newState) => { gameState = newState; renderUnits(); });
 
-// --- ВИЗУАЛИЗАЦИЯ ПОПАДАНИЙ И РАДИУСОВ ВЗРЫВА ---
 socket.on('fireResult', (data) => {
     createSplash(data.x, data.y, data.targetRole, data.result);
 
-    const offsetZ = (data.targetRole === 'p1') ? 15 : -15;
+    const offsetZ = (data.targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
     const worldX = data.x - (FIELD_SIZE / 2);
     const worldZ = data.y - (FIELD_SIZE / 2) + offsetZ;
 
@@ -316,38 +314,23 @@ socket.on('fireResult', (data) => {
     explosionGroup.position.set(worldX, 0.07, worldZ);
     scene.add(explosionGroup);
 
-    // 1. ПЕРВЫЙ РАДИУС ПОПАДАНИЯ (Черный кружок, 2.25м)
     const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32);
     directGeo.rotateX(-Math.PI / 2);
-    const directMat = new THREE.MeshBasicMaterial({ 
-        color: 0x111111, 
-        side: THREE.DoubleSide, 
-        transparent: true, 
-        opacity: 0.85 
-    });
+    const directMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
     const directMesh = new THREE.Mesh(directGeo, directMat);
     explosionGroup.add(directMesh);
 
-    // 2. ВТОРОЙ РАДИУС ОСКОЛКОВ (Серый кружок, 6 метров, 70% прозрачности)
     const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32);
     splashGeo.rotateX(-Math.PI / 2);
-    const splashMat = new THREE.MeshBasicMaterial({ 
-        color: 0x888888, 
-        side: THREE.DoubleSide, 
-        transparent: true, 
-        opacity: 0.3 
-    });
+    const splashMat = new THREE.MeshBasicMaterial({ color: 0x888888, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
     const splashMesh = new THREE.Mesh(splashGeo, splashMat);
     splashMesh.position.y = -0.01; 
     explosionGroup.add(splashMesh);
 
-    // Удаляем круги через 2 секунды
     setTimeout(() => {
         scene.remove(explosionGroup);
-        directGeo.dispose();
-        directMat.dispose();
-        splashGeo.dispose();
-        splashMat.dispose();
+        directGeo.dispose(); directMat.dispose();
+        splashGeo.dispose(); splashMat.dispose();
     }, 2000);
 });
 
@@ -380,7 +363,7 @@ function renderUnits() {
                 return;
             }
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1', unit.hp);
-            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) + 15 });
+            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) + FIELD_OFFSET_Z });
         });
     }
     if (p2 && p2.units) {
@@ -391,7 +374,7 @@ function renderUnits() {
                 return;
             }
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
-            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) - 15 });
+            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) - FIELD_OFFSET_Z });
         });
     }
 }
