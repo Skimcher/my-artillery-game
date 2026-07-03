@@ -17,8 +17,8 @@ let sauCenterOffset = new THREE.Vector3();
 
 // Константы размеров игры
 const FIELD_SIZE = 25;       
-const DIRECT_RADIUS = 3;     // Первый радиус (черный кружок)
-const SPLASH_RADIUS = 6;     // Второй радиус (серый кружок)
+const DIRECT_RADIUS = 2.25;  // Первый критический радиус (черный кружок)
+const SPLASH_RADIUS = 6;     // Второй радиус осколков (серый кружок)
 
 // --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container');
@@ -304,21 +304,17 @@ socket.on('gameStateUpdate', (newState) => { gameState = newState; renderUnits()
 
 // --- ВИЗУАЛИЗАЦИЯ ПОПАДАНИЙ И РАДИУСОВ ВЗРЫВА ---
 socket.on('fireResult', (data) => {
-    // 1. Создаем фонтан разлетающихся частиц земли/огня
     createSplash(data.x, data.y, data.targetRole, data.result);
 
-    // Вычисляем мировые координаты центра взрыва
     const offsetZ = (data.targetRole === 'p1') ? 15 : -15;
     const worldX = data.x - (FIELD_SIZE / 2);
     const worldZ = data.y - (FIELD_SIZE / 2) + offsetZ;
 
-    // Группа для хранения обоих кругов радиусов
     const explosionGroup = new THREE.Group();
     explosionGroup.position.set(worldX, 0.07, worldZ);
     scene.add(explosionGroup);
 
-    // 2. ПЕРВЫЙ РАДИУС ПОПАДАНИЯ (Черный кружок, 3 метра)
-    // В Three.js используется радиус, поэтому DIRECT_RADIUS (3м) передаем напрямую
+    // 1. ПЕРВЫЙ РАДИУС ПОПАДАНИЯ (Черный кружок, уменьшен до 2.25м)
     const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32);
     directGeo.rotateX(-Math.PI / 2);
     const directMat = new THREE.MeshBasicMaterial({ 
@@ -330,7 +326,7 @@ socket.on('fireResult', (data) => {
     const directMesh = new THREE.Mesh(directGeo, directMat);
     explosionGroup.add(directMesh);
 
-    // 3. ВТОРОЙ РАДИУС ОСКОЛКОВ (Серый кружок, 6 метров, 70% прозрачности)
+    // 2. ВТОРОЙ РАДИУС ОСКОЛКОВ (Серый кружок, 6 метров, 70% прозрачности)
     const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32);
     splashGeo.rotateX(-Math.PI / 2);
     const splashMat = new THREE.MeshBasicMaterial({ 
@@ -340,11 +336,10 @@ socket.on('fireResult', (data) => {
         opacity: 0.3 // 30% видимости (70% прозрачности)
     });
     const splashMesh = new THREE.Mesh(splashGeo, splashMat);
-    // Приподнимаем на мизерную долю миллиметра ниже черного, чтобы текстуры не мерцали (Z-fighting)
     splashMesh.position.y = -0.01; 
     explosionGroup.add(splashMesh);
 
-    // Удаляем оба круга с арены ровно через 2 секунды (2000 мс)
+    // Удаляем круги через 2 секунды
     setTimeout(() => {
         scene.remove(explosionGroup);
         directGeo.dispose();
