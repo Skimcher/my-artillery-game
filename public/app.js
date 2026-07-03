@@ -208,13 +208,14 @@ function updateHpBarsPositions() {
         
         if (domEl && domEl.style.display !== 'none') {
             group.getWorldPosition(tempV);
-            tempV.y += 2.2; 
+            tempV.y += 2.5; // Слегка приподняли высоту над танком под увеличенный размер
             tempV.project(camera);
             
             const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
             
-            domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
+            // scale(2.0) увеличивает полоску HP ровно в два раза
+            domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px) scale(2.0)`;
         }
     });
 }
