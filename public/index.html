@@ -126,53 +126,64 @@
         /* АДАПТИВНЫЙ CSS ДЛЯ СМАРТФОНОВ (Экран менее 768px)          */
         /* ======================================================== */
         @media (max-width: 768px) {
-            /* Фиксируем весь контейнер у самого верхнего края экрана, чтобы он не залезал на поля боя */
+            /* Оставляем надпись и таймер у самого верхнего края */
             #ui-container {
                 top: 10px;
                 left: 0;
                 transform: none;
                 width: 100%;
-                flex-direction: column; /* Прямой порядок: сначала текст, потом кнопки под ним */
-                align-items: center;
+                display: block; /* Сбрасываем флекс для ПК, чтобы позиционировать кнопки отдельно */
             }
 
-            /* Надпись Opponent's turn / Your turn в 2 раза больше (48px) строго наверху */
+            /* Текст хода крупный и в самой верхней свободной зоне экрана */
             #turn-indicator {
-                font-size: 48px;
+                font-size: 44px;
                 margin-bottom: 5px;
                 text-shadow: 0 4px 8px rgba(0,0,0,0.9);
             }
 
-            /* Таймер увеличиваем для читаемости на смартфонах */
             #timer-container {
-                font-size: 28px;
-                margin-bottom: 15px;
+                font-size: 26px;
+                margin-bottom: 0;
             }
 
-            /* Контейнер кнопок располагается прямо под таймером */
+            /* ПЕРЕМЕЩАЕМ КНОПКИ В ЦЕНТР ЭКРАНА ПО ВЕРТИКАЛИ 
+               Они встанут ровно в пустое пространство между полями боя */
             #controls {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
                 display: flex;
                 justify-content: center;
                 width: 100%;
+                z-index: 20;
             }
 
-            /* Кнопки FIRE и MOVE в 2 раза больше, находятся в верхней безопасной зоне */
+            /* Если кнопки скрыты, к ним добавляется класс .hidden — плавно гасим и убираем кликабельность */
+            #controls.hidden {
+                opacity: 0;
+                pointer-events: none;
+                transform: translate(-50%, -60%);
+            }
+
+            /* Кнопки в 2 раза крупнее, чтобы не промахнуться пальцем */
             button {
-                padding: 20px 45px;  
-                font-size: 32px;     
+                padding: 18px 40px;  
+                font-size: 30px;     
                 margin: 0 15px;      
                 border-radius: 12px; 
-                border-width: 5px;   
-                box-shadow: 0 6px 10px rgba(0,0,0,0.5);
+                border-width: 4px;   
+                box-shadow: 0 6px 12px rgba(0,0,0,0.6);
             }
             
-            /* Масштабируем HP-бары под мобильные экраны */
+            /* Чуть увеличиваем отображение HP-баров на смартфонах */
             .hp-bar-container {
-                width: 100px;
-                height: 20px;
+                width: 90px;
+                height: 18px;
             }
             .hp-bar-text {
-                font-size: 12px;
+                font-size: 11px;
             }
         }
     </style>
@@ -191,6 +202,7 @@
         <div id="timer-container">Время: <span id="timer">0</span>с</div>
 
         <!-- Кнопки управления (FIRE / MOVE) -->
+        <!-- Для мобилок этот блок вырывается из ui-container и встает по центру экрана через position: fixed -->
         <div id="controls" class="hidden">
             <button id="btn-fire" class="active">FIRE</button>
             <button id="btn-move">MOVE</button>
