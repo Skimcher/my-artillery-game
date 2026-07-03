@@ -14,7 +14,7 @@ let waitingPlayer = null;
 // --- ИГРОВЫЕ ПАРАМЕТРЫ ---
 const FIELD_SIZE = 25;       // Размер поля в метрах
 const UNIT_RADIUS = 1.725;   // 3.45м / 2 (размер 3D-модели +15%)
-const DIRECT_RADIUS = 3;     // Радиус прямого попадания (уничтожение, 0 HP)
+const DIRECT_RADIUS = 2.25;  // Уменьшен на 25%. Радиус критического попадания (0 HP)
 const SPLASH_RADIUS = 6;     // Радиус осколков (-51 HP)
 
 // Генерация случайных позиций САУ на поле боя
@@ -127,7 +127,7 @@ io.on('connection', (socket) => {
                 if (!u.destroyed) {
                     const distance = Math.hypot(u.x - targetX, u.y - targetY);
                     
-                    // 1. Прямое попадание (Взрыв задел корпус в радиусе 3м)
+                    // 1. Прямое критическое попадание (Взрыв задел корпус в радиусе 2.25м)
                     if (distance <= (DIRECT_RADIUS + UNIT_RADIUS)) {
                         u.hp = 0;
                         u.destroyed = true;
@@ -137,13 +137,12 @@ io.on('connection', (socket) => {
                     else if (distance <= (SPLASH_RADIUS + UNIT_RADIUS)) {
                         u.hp = Math.max(0, u.hp - 51);
                         
-                        // Если здоровье упало до нуля, только тогда уничтожаем
+                        // Если здоровье упало до нуля, уничтожаем
                         if (u.hp <= 0) {
                             u.hp = 0;
                             u.destroyed = true;
                         }
                         
-                        // Если до этого не было прямого попадания в другую цель, ставим статус осколков
                         if (hitType !== 'hit') {
                             hitType = 'splash'; 
                         }
@@ -151,10 +150,10 @@ io.on('connection', (socket) => {
                 }
             });
             
-            // Отправляем тип попадания клиентам для красивых визуальных эффектов
+            // Отправляем тип попадания клиентам
             io.to(roomId).emit('fireResult', { result: hitType, x: targetX, y: targetY, targetRole: enemyPlayer.role });
 
-            // Проверка условий победы (остались ли живые САУ у противника)
+            // Проверка условий победы
             const aliveUnits = enemyPlayer.units.filter(u => !u.destroyed);
             if (aliveUnits.length === 0) {
                 io.to(roomId).emit('gameOver', { winner: currentPlayer.id });
@@ -171,7 +170,6 @@ io.on('connection', (socket) => {
         if (data.type === 'move') {
             const unit = currentPlayer.units[data.unitIndex];
             if (unit && !unit.destroyed) {
-                // Ограничиваем перемещение с учетом радиуса пушки, чтобы она не вылетала за пределы 25х25 метров
                 unit.x = Math.max(UNIT_RADIUS, Math.min(FIELD_SIZE - UNIT_RADIUS, targetX));
                 unit.y = Math.max(UNIT_RADIUS, Math.min(FIELD_SIZE - UNIT_RADIUS, targetY));
                 
@@ -205,7 +203,7 @@ function sendMaskedStateToAll(room) {
     io.to(room.players.p2.id).emit('gameStateUpdate', getMaskedState(room, 'p2'));
 }
 
-// Туман войны: скрывает точные координаты живых врагов, оставляя информацию о HP
+// Туман войны
 function getMaskedState(room, role) {
     const state = {
         turn: room.turn,
