@@ -31,12 +31,27 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
     scene.background = bgTexture;
 });
 
-// --- ТРЕХМЕРНАЯ КАМЕРА (НАСТРОЙКА ВИДА И ОТСТУПОВ) ---
-const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
+// Базовый FOV для ПК (горизонтальных экранов)
+const BASE_FOV = 41;
+const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 function updateCameraPosition() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const aspect = width / height;
+
+    // Динамический расчет FOV для смартфонов (портретный режим)
+    // Если экран узкий и высокий, увеличиваем FOV, чтобы отдалить сцену и уместить нижнее поле с запасом
+    if (aspect < 1) {
+        camera.fov = BASE_FOV / aspect * 0.85; // Настраиваемый коэффициент отступа
+    } else {
+        camera.fov = BASE_FOV;
+    }
+    camera.updateProjectionMatrix();
+
+    // Фиксированное положение камеры и точка взгляда
     camera.position.set(0, 42, 38); 
-    camera.lookAt(0, -1, -5);
+    camera.lookAt(0, -2, -5); 
 }
 updateCameraPosition();
 
