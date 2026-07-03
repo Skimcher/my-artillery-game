@@ -19,7 +19,7 @@ let sauCenterOffset = new THREE.Vector3();
 const FIELD_SIZE = 25;       
 const DIRECT_RADIUS = 2.25;  // Первый критический радиус (черный кружок)
 const SPLASH_RADIUS = 6;     // Второй радиус осколков (серый кружок)
-const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра (было 15, уменьшили чтобы влезало на экраны)
+const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра (уменьшено для мобильных экранов)
 
 // --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container');
@@ -35,7 +35,9 @@ const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerH
 
 function updateCameraPosition() {
     camera.position.set(0, 45, 35); 
-    camera.lookAt(0, 0, 0);
+    // Сдвигаем точку фокуса вперед по оси Z. Камера наклоняется выше, 
+    // поднимая поля боя и приоткрывая текстуру заднего фона снизу.
+    camera.lookAt(0, 0, -3.5);
 }
 updateCameraPosition();
 
