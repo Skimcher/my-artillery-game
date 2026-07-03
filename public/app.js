@@ -74,10 +74,8 @@ scene.add(outlines.line1, outlines.line2);
 let fieldClickPlanes = [];
 
 // --- СОЗДАНИЕ ПЛАТФОРМ ---
+// Загружаем текстуру и НЕ дублируем её, чтобы она растянулась на весь меш
 const battlefieldTexture = textureLoader.load('/assets/battlefield.jpg');
-battlefieldTexture.wrapS = THREE.RepeatWrapping;
-battlefieldTexture.wrapT = THREE.RepeatWrapping;
-battlefieldTexture.repeat.set(3, 3);
 
 function createBattlefields() {
     const fieldGeometry = new THREE.BoxGeometry(FIELD_SIZE, 0.1, FIELD_SIZE);
@@ -198,7 +196,7 @@ function updateHpBarsPositions() {
             
             tempV.project(camera);
             
-            const x = (tempV.x *  .5 + .5) * window.innerWidth;
+            const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
             
             domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
