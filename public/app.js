@@ -31,13 +31,12 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
     scene.background = bgTexture;
 });
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+// --- ТРЕХМЕРНАЯ КАМЕРА (НАСТРОЙКА ВИДА И ОТСТУПОВ) ---
+const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 function updateCameraPosition() {
-    camera.position.set(0, 45, 35); 
-    // Сдвигаем точку фокуса вперед по оси Z. Камера наклоняется выше, 
-    // поднимая поля боя и приоткрывая текстуру заднего фона снизу.
-    camera.lookAt(0, 0, -3.5);
+    camera.position.set(0, 42, 38); 
+    camera.lookAt(0, -1, -5);
 }
 updateCameraPosition();
 
