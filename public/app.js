@@ -182,18 +182,50 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
         hpContainer = document.createElement('div');
         hpContainer.id = `hp-container-${id}`;
         hpContainer.className = 'hp-bar-container';
+        
+        // Внутренний HTML с базовой структурой полоски и текста
         hpContainer.innerHTML = `<div class="hp-bar-fill"></div><span class="hp-bar-text"></span>`;
         document.body.appendChild(hpContainer);
+    }
+
+    // ЖЕСТКОЕ ЗАДАНИЕ СТИЛЕЙ ИЗ JAVASCRIPT, ЧТОБЫ ИЗБЕЖАТЬ СБОЕВ CSS
+    hpContainer.style.position = 'absolute';
+    hpContainer.style.top = '0';
+    hpContainer.style.left = '0';
+    hpContainer.style.width = '40px';         // Базовая ширина (увеличится через scale)
+    hpContainer.style.height = '6px';          // Базовая высота
+    hpContainer.style.background = 'rgba(0, 0, 0, 0.6)';
+    hpContainer.style.border = '1px solid #ffffff';
+    hpContainer.style.pointerEvents = 'none';
+    hpContainer.style.zIndex = '9999';          // Поверх трехмерного холста канваса
+
+    const fill = hpContainer.querySelector('.hp-bar-fill');
+    const text = hpContainer.querySelector('.hp-bar-text');
+
+    if (fill) {
+        fill.style.height = '100%';
+        fill.style.background = '#2ed573';      // Яркий зеленый цвет полоски HP
+        fill.style.transition = 'width 0.2s ease';
+    }
+
+    if (text) {
+        text.style.position = 'absolute';
+        text.style.top = '-14px';
+        text.style.width = '100%';
+        text.style.textAlign = 'center';
+        text.style.color = '#ffffff';
+        text.style.fontSize = '9px';
+        text.style.fontWeight = 'bold';
+        text.style.fontFamily = 'sans-serif';
+        text.style.textShadow = '1px 1px 2px #000000';
     }
 
     if (isDestroyed) {
         hpContainer.style.display = 'none'; 
     } else {
         hpContainer.style.display = 'block';
-        const fill = hpContainer.querySelector('.hp-bar-fill');
-        const text = hpContainer.querySelector('.hp-bar-text');
-        fill.style.width = `${hp}%`;
-        text.innerText = `${hp} HP`;
+        if (fill) fill.style.width = `${hp}%`;
+        if (text) text.innerText = `${hp} HP`;
     }
 
     group.userData = { domId: `hp-container-${id}` };
@@ -208,13 +240,13 @@ function updateHpBarsPositions() {
         
         if (domEl && domEl.style.display !== 'none') {
             group.getWorldPosition(tempV);
-            tempV.y += 2.5; // Слегка приподняли высоту над танком под увеличенный размер
+            tempV.y += 3.2; // Приподняли повыше над танком, чтобы увеличенный размер не перекрывал саму модельку
             tempV.project(camera);
             
             const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
             
-            // scale(2.0) увеличивает полоску HP ровно в два раза
+            // scale(2.0) — увеличивает полоску со шрифтом ровно в 2 раза прямо на экране
             domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px) scale(2.0)`;
         }
     });
