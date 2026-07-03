@@ -11,15 +11,33 @@ expressApp.use(express.static('public'));
 let rooms = {}; 
 let waitingPlayer = null; 
 
-// Функция для генерации уникальных случайных координат для двух пушек игрока
+// Параметры новой игровой механики
+const FIELD_SIZE = 25;       // Размер поля в метрах
+const UNIT_RADIUS = 1.5;     // Радиус САУ (половина от 3 метров)
+const EXPLOSION_RADIUS = 4;  // Радиус поражения взрыва в метрах
+
+// Функция для генерации случайных свободных координат
 function generateRandomUnits() {
-    const u1 = { x: Math.floor(Math.random() * 8), y: Math.floor(Math.random() * 8), destroyed: false };
-    let u2 = { x: Math.floor(Math.random() * 8), y: Math.floor(Math.random() * 8), destroyed: false };
+    // Генерируем с отступом от краев, чтобы пушка не торчала за полем
+    const min = UNIT_RADIUS;
+    const max = FIELD_SIZE - UNIT_RADIUS;
+
+    const u1 = { 
+        x: min + Math.random() * (max - min), 
+        y: min + Math.random() * (max - min), 
+        destroyed: false 
+    };
     
-    // Если координаты совпали, перегенерируем вторую пушку, пока они не станут уникальными
-    while (u1.x === u2.x && u1.y === u2.y) {
-        u2.x = Math.floor(Math.random() * 8);
-        u2.y = Math.floor(Math.random() * 8);
+    let u2 = { 
+        x: min + Math.random() * (max - min), 
+        y: min + Math.random() * (max - min), 
+        destroyed: false 
+    };
+    
+    // Проверяем, чтобы пушки не заспавнились друг в друге (расстояние между центрами > 3м)
+    while (Math.hypot(u1.x - u2.x, u1.y - u2.y) < (UNIT_RADIUS * 2)) {
+        u2.x = min + Math.random() * (max - min);
+        u2.y = min + Math.random() * (max - min);
     }
     
     return [u1, u2];
@@ -31,23 +49,17 @@ io.on('connection', (socket) => {
     socket.on('joinGame', () => {
         if (!waitingPlayer) {
             const roomId = 'room_' + socket.id;
-            
-            // Таймер ожидания соперника на 300 секунд (5 минут)
             let waitingTimerValue = 300;
             
             const waitingInterval = setInterval(() => {
                 waitingTimerValue--;
-                
-                // Отправляем текущие секунды клиенту
                 socket.emit('timerUpdate', waitingTimerValue);
                 
-                // Если за 5 минут никто не пришел, убираем игрока из очереди
                 if (waitingTimerValue <= 0) {
                     clearInterval(waitingInterval);
                     socket.emit('gameOver', { winner: null }); 
                     if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
                         waitingPlayer = null;
-                        console.log(`Время ожидания в комнате ${roomId} истекло.`);
                     }
                 }
             }, 1000);
@@ -58,9 +70,7 @@ io.on('connection', (socket) => {
             socket.emit('timerUpdate', waitingTimerValue); 
             
         } else {
-            // Оппонент нашелся! Очищаем таймер ожидания перед стартом игры
             clearInterval(waitingPlayer.interval);
-
             const roomId = waitingPlayer.roomId;
             const player1 = waitingPlayer.socket;
             const player2 = socket;
@@ -68,7 +78,6 @@ io.on('connection', (socket) => {
             socket.join(roomId);
             waitingPlayer = null; 
 
-            // Генерируем случайные начальные позиции для обеих команд
             rooms[roomId] = {
                 players: {
                     p1: { id: player1.id, role: 'p1', units: generateRandomUnits() }, 
@@ -79,7 +88,6 @@ io.on('connection', (socket) => {
                 roomId: roomId
             };
 
-            // Отправляем замаскированное состояние (туман войны) при старте игры
             player1.emit('gameStart', { role: 'p1', state: getMaskedState(rooms[roomId], 'p1') });
             player2.emit('gameStart', { role: 'p2', state: getMaskedState(rooms[roomId], 'p2') });
 
@@ -87,12 +95,10 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Обработка отключения игрока из очереди
     socket.on('disconnect', () => {
         if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
             clearInterval(waitingPlayer.interval);
             waitingPlayer = null;
-            console.log(`Очередь ожидания очищена, так как первый игрок вышел.`);
         }
     });
 
@@ -100,26 +106,38 @@ io.on('connection', (socket) => {
     socket.on('playerAction', (data) => {
         let roomId = null;
         for (const r of socket.rooms) {
-            if (r.startsWith('room_')) {
-                roomId = r;
-                break;
-            }
+            if (r.startsWith('room_')) { roomId = r; break; }
         }
-        
         const room = rooms[roomId];
         if (!room) return; 
 
         const currentPlayer = data.forcedRole ? room.players[data.forcedRole] : (room.players.p1.id === socket.id ? room.players.p1 : room.players.p2);
         const enemyPlayer = currentPlayer.role === 'p1' ? room.players.p2 : room.players.p1;
 
+        // Ограничиваем входящие координаты размерами поля (от 0 до 25)
+        let targetX = Math.max(0, Math.min(FIELD_SIZE, data.x));
+        let targetY = Math.max(0, Math.min(FIELD_SIZE, data.y));
+
         if (data.type === 'fire') {
-            const hitIndex = enemyPlayer.units.findIndex(u => !u.destroyed && u.x === data.x && u.y === data.y);
+            let hitSomething = false;
+
+            // Проверяем каждую пушку врага на попадание в радиус взрыва
+            enemyPlayer.units.forEach(u => {
+                if (!u.destroyed) {
+                    // Расстояние от точки взрыва до центра пушки
+                    const distance = Math.hypot(u.x - targetX, u.y - targetY);
+                    
+                    // Пушка уничтожена, если взрыв задел её корпус
+                    if (distance <= (EXPLOSION_RADIUS + UNIT_RADIUS)) {
+                        u.destroyed = true;
+                        hitSomething = true;
+                    }
+                }
+            });
             
-            if (hitIndex !== -1) {
-                console.log(`Попадание по координатам X:${data.x}, Y:${data.y}`);
-                enemyPlayer.units[hitIndex].destroyed = true;
-                
-                io.to(roomId).emit('fireResult', { result: 'hit', x: data.x, y: data.y, targetRole: enemyPlayer.role });
+            if (hitSomething) {
+                console.log(`Попадание осколками по координатам X:${targetX.toFixed(2)}, Y:${targetY.toFixed(2)}`);
+                io.to(roomId).emit('fireResult', { result: 'hit', x: targetX, y: targetY, targetRole: enemyPlayer.role });
 
                 const aliveUnits = enemyPlayer.units.filter(u => !u.destroyed);
                 if (aliveUnits.length === 0) {
@@ -129,10 +147,9 @@ io.on('connection', (socket) => {
                     return;
                 }
             } else {
-                io.to(roomId).emit('fireResult', { result: 'miss', x: data.x, y: data.y, targetRole: enemyPlayer.role });
+                io.to(roomId).emit('fireResult', { result: 'miss', x: targetX, y: targetY, targetRole: enemyPlayer.role });
             }
             
-            // После выстрела отправляем обновленное замаскированное состояние игрокам и переключаем ход
             sendMaskedStateToAll(room);
             switchTurn(room);
         }
@@ -140,10 +157,10 @@ io.on('connection', (socket) => {
         if (data.type === 'move') {
             const unit = currentPlayer.units[data.unitIndex];
             if (unit && !unit.destroyed) {
-                unit.x = data.x;
-                unit.y = data.y;
+                // Ограничиваем движение с учетом радиуса пушки, чтобы она не вылезала за забор 25х25 метров
+                unit.x = Math.max(UNIT_RADIUS, Math.min(FIELD_SIZE - UNIT_RADIUS, targetX));
+                unit.y = Math.max(UNIT_RADIUS, Math.min(FIELD_SIZE - UNIT_RADIUS, targetY));
                 
-                // Отправляем замаскированное состояние после перемещения и переключаем ход
                 sendMaskedStateToAll(room);
                 switchTurn(room);
             }
@@ -154,41 +171,27 @@ io.on('connection', (socket) => {
 function startGameTimer(roomId) {
     const room = rooms[roomId];
     if (!room) return;
-
     room.interval = setInterval(() => {
         room.timer--;
         io.to(roomId).emit('timerUpdate', room.timer);
-
-        if (room.timer <= 0) {
-            switchTurn(room);
-        }
+        if (room.timer <= 0) { switchTurn(room); }
     }, 1000);
 }
 
 function switchTurn(room) {
-    room.timer = 9; // Время на ход — 9 секунд
+    room.timer = 9;
     const p1Id = room.players.p1.id;
     const p2Id = room.players.p2.id;
     room.turn = (room.turn === p1Id) ? p2Id : p1Id;
-
-    io.to(room.roomId).emit('turnChanged', {
-        turn: room.turn,
-        timer: room.timer
-    });
+    io.to(room.roomId).emit('turnChanged', { turn: room.turn, timer: room.timer });
 }
 
-// Функция для раздельной отправки замаскированного состояния игрокам
 function sendMaskedStateToAll(room) {
-    const stateForP1 = getMaskedState(room, 'p1');
-    const stateForP2 = getMaskedState(room, 'p2');
-    
-    io.to(room.players.p1.id).emit('gameStateUpdate', stateForP1);
-    io.to(room.players.p2.id).emit('gameStateUpdate', stateForP2);
+    io.to(room.players.p1.id).emit('gameStateUpdate', getMaskedState(room, 'p1'));
+    io.to(room.players.p2.id).emit('gameStateUpdate', getMaskedState(room, 'p2'));
 }
 
-// Безопасная функция маскировки состояния (Исключен краш из-за системного таймера)
 function getMaskedState(room, role) {
-    // Копируем только безопасные для JSON данные игры, полностью игнорируя системный room.interval
     const state = {
         turn: room.turn,
         timer: room.timer,
@@ -196,21 +199,13 @@ function getMaskedState(room, role) {
         players: JSON.parse(JSON.stringify(room.players))
     };
     
+    // В тумане войны скрытые пушки отправляются со специальным флагом координат (-1000)
     if (role === 'p1') {
-        // Для p1 прячем живые пушки игрока p2
-        state.players.p2.units = state.players.p2.units.map(u => {
-            return u.destroyed ? u : { x: -1, y: -1, destroyed: false };
-        });
+        state.players.p2.units = state.players.p2.units.map(u => u.destroyed ? u : { x: -1000, y: -1000, destroyed: false });
     } else if (role === 'p2') {
-        // Для p2 прячем живые пушки игрока p1
-        state.players.p1.units = state.players.p1.units.map(u => {
-            return u.destroyed ? u : { x: -1, y: -1, destroyed: false };
-        });
+        state.players.p1.units = state.players.p1.units.map(u => u.destroyed ? u : { x: -1000, y: -1000, destroyed: false });
     }
     return state;
 }
 
-// Запуск сервера на 3000 порту
-server.listen(3000, () => {
-    console.log('Сервер запущен на http://localhost:3000');
-});
+server.listen(3000, () => { console.log('Сервер запущен на http://localhost:3000'); });
