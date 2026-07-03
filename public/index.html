@@ -2,183 +2,200 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Artillery Duel</title>
+    <!-- Настройка viewport для корректного масштабирования на смартфонах -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>САУ Дуэль 3D</title>
     <style>
-        /* Общие сбросы стилей */
-        html, body {
+        body {
             margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
             overflow: hidden;
-            background-color: #F5F2EB;
+            background-color: #000;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            user-select: none;
         }
 
-        /* Контейнер для Three.js Canvas */
         #canvas-container {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
+            width: 100vw;
+            height: 100vh;
+            display: block;
         }
 
-        /* Верхняя панель состояния игры */
-        #hud {
+        /* --- UI ИНТЕРФЕЙС (ВЕРСИЯ ДЛЯ ПК) --- */
+        #ui-container {
             position: absolute;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 5;
-            background: rgba(255, 255, 255, 0.85);
-            padding: 12px 24px;
-            border-radius: 30px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            display: flex;
-            align-items: center;
-            gap: 20px;
+            text-align: center;
+            user-select: none;
             pointer-events: none;
+            z-index: 10;
         }
 
         #turn-indicator {
-            font-size: 18px;
-            font-weight: bold;
+            font-size: 24px;
+            font-weight: 900;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 2px;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            color: #fff;
         }
 
         #timer-container {
-            font-size: 16px;
-            color: #333;
-            font-weight: 600;
-        }
-
-        #timer {
-            font-size: 20px;
-            color: #ff4757;
+            font-size: 18px;
+            color: #fff;
             font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
         }
 
-        /* Нижняя панель управления действиями */
         #controls {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 5;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px 15px;
-            border-radius: 40px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-            display: flex;
-            gap: 15px;
+            pointer-events: auto;
+            display: inline-block;
             transition: opacity 0.3s ease, transform 0.3s ease;
         }
 
         #controls.hidden {
             opacity: 0;
-            transform: translateX(-50%) translateY(100px);
             pointer-events: none;
+            transform: translateY(-10px);
         }
 
-        /* Стили кнопок действий */
-        .btn {
-            border: none;
-            padding: 12px 28px;
-            font-size: 15px;
-            font-weight: bold;
-            border-radius: 25px;
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            margin: 0 8px;
             cursor: pointer;
-            background: #e4e7eb;
-            color: #57606f;
+            border: 3px solid #111;
+            background: #fff;
+            color: #111;
+            font-weight: bold;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             transition: all 0.2s ease;
-            text-transform: uppercase;
         }
 
-        .btn:hover {
-            background: #d2d6dc;
-            color: #2f3542;
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
-        .btn.active {
-            background: #2ed573;
-            color: white;
-            box-shadow: 0 4px 10px rgba(46, 213, 115, 0.4);
+        button.active {
+            background: #111;
+            color: #fff;
+            border-color: #fff;
         }
 
-        #btn-fire.active {
-            background: #ff4757;
-            box-shadow: 0 4px 10px rgba(255, 71, 87, 0.4);
-        }
-
-        /* --- СТИЛИ ДИНАМИЧЕСКИХ ПОЛОСОК ЗДОРОВЬЯ (HP) НАД САУ --- */
+        /* --- СТИЛИ ДЛЯ HP-БАРОВ НАД МОДЕЛЯМИ САУ --- */
         .hp-bar-container {
             position: absolute;
-            top: 0; 
-            left: 0;
             width: 70px;
             height: 14px;
-            background: rgba(0, 0, 0, 0.65);
-            border: 1px solid #1e272e;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #fff;
             border-radius: 4px;
-            pointer-events: none; /* Игнорируем клики мыши, чтобы не ломать Raycasting */
-            z-index: 10;
-            display: none; /* Включается динамически из JS */
             overflow: hidden;
-            box-shadow: 0px 3px 6px rgba(0,0,0,0.4);
+            pointer-events: none;
+            z-index: 5;
+            display: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
         }
 
-        /* Зеленый индикатор прочности */
         .hp-bar-fill {
             height: 100%;
-            background: #2ed573; 
             width: 100%;
-            transition: width 0.25s ease-out;
+            background: #2ed573;
+            transition: width 0.3s ease;
         }
 
-        /* Текст с цифрами поверх полоски */
         .hp-bar-text {
             position: absolute;
-            width: 100%;
-            text-align: center;
-            top: 50%; 
+            top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-family: Arial, sans-serif;
-            font-size: 10px;
+            font-size: 9px;
+            color: #fff;
             font-weight: bold;
-            color: #ffffff;
-            text-shadow: 1px 1px 1px #000;
+            font-family: monospace;
+        }
+
+        /* ======================================================== */
+        /* АДАПТИВНЫЙ CSS ДЛЯ СМАРТФОНОВ (Экран менее 768px)          */
+        /* ======================================================== */
+        @media (max-width: 768px) {
+            /* Перестраиваем контейнер: кнопки спускаются ПОД надпись */
+            #ui-container {
+                display: flex;
+                flex-direction: column-reverse; 
+                align-items: center;
+                width: 95%;
+                top: 30px; /* Чуть опускаем интерфейс от верхнего края */
+            }
+
+            /* Индикатор хода в 2 раза больше (было 24px -> стало 48px) */
+            #turn-indicator {
+                font-size: 48px;
+                margin-bottom: 0;
+                margin-top: 20px; /* Делаем отступ сверху, так как порядок инвертирован */
+                text-shadow: 0 4px 8px rgba(0,0,0,0.7);
+            }
+
+            /* Таймер увеличиваем для читаемости */
+            #timer-container {
+                font-size: 32px;
+                margin-bottom: 0;
+                margin-top: 10px;
+            }
+
+            /* Блок с кнопками сдвигаем визуально наверх flex-структуры */
+            #controls {
+                margin-bottom: 10px;
+            }
+
+            /* Кнопки FIRE и MOVE в 2 раза больше (шрифт 16px -> 32px + огромный padding) */
+            button {
+                padding: 24px 48px;  
+                font-size: 32px;     
+                margin: 0 15px;      
+                border-radius: 12px; 
+                border-width: 5px;   
+            }
+            
+            /* Крупные HP-бары для удобства на экранах телефонов */
+            .hp-bar-container {
+                width: 100px;
+                height: 20px;
+            }
+            .hp-bar-text {
+                font-size: 12px;
+            }
         }
     </style>
 </head>
 <body>
 
-    <!-- Контейнер для рендеринга 3D графики -->
+    <!-- Контейнер для рендера Three.js сцены -->
     <div id="canvas-container"></div>
 
-    <!-- HUD: Информация о ходах и времени -->
-    <div id="hud">
+    <!-- Игровой интерфейс управления -->
+    <div id="ui-container">
+        <!-- Кнопки управления (FIRE / MOVE) -->
+        <div id="controls" class="hidden">
+            <button id="btn-fire" class="active">FIRE</button>
+            <button id="btn-move">MOVE</button>
+        </div>
+
+        <!-- Время хода -->
+        <div id="timer-container">Время: <span id="timer">0</span>с</div>
+
+        <!-- Надпись фазы (YOUR TURN / OPPONENT'S TURN) -->
         <div id="turn-indicator">Подключение к серверу...</div>
-        <div id="timer-container">Время: <span id="timer">--</span>с</div>
     </div>
 
-    <!-- Панель выбора действий (Огонь / Перемещение) -->
-    <div id="controls" class="hidden">
-        <button id="btn-fire" class="btn active">Огонь</button>
-        <button id="btn-move" class="btn">Манёвр</button>
-    </div>
-
-    <!-- Зависимости: Socket.IO, Three.js и загрузчик GLTF моделей -->
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Подключение библиотек и игровых скриптов -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    
-    <!-- Основная логика игры -->
-    <script src="app.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
 </body>
 </html>
