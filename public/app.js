@@ -23,7 +23,12 @@ const SPLASH_RADIUS = 6;     // Второй радиус осколков (се
 // --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xF5F2EB);
+
+// Загрузка вашего JPG файла в качестве фонового изображения сцены
+const textureLoader = new THREE.TextureLoader();
+textureLoader.load('/assets/background.jpg', (bgTexture) => {
+    scene.background = bgTexture;
+});
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -69,7 +74,6 @@ scene.add(outlines.line1, outlines.line2);
 let fieldClickPlanes = [];
 
 // --- СОЗДАНИЕ ПЛАТФОРМ ---
-const textureLoader = new THREE.TextureLoader();
 const battlefieldTexture = textureLoader.load('/assets/battlefield.jpg');
 battlefieldTexture.wrapS = THREE.RepeatWrapping;
 battlefieldTexture.wrapT = THREE.RepeatWrapping;
@@ -314,7 +318,7 @@ socket.on('fireResult', (data) => {
     explosionGroup.position.set(worldX, 0.07, worldZ);
     scene.add(explosionGroup);
 
-    // 1. ПЕРВЫЙ РАДИУС ПОПАДАНИЯ (Черный кружок, уменьшен до 2.25м)
+    // 1. ПЕРВЫЙ РАДИУС ПОПАДАНИЯ (Черный кружок, 2.25м)
     const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32);
     directGeo.rotateX(-Math.PI / 2);
     const directMat = new THREE.MeshBasicMaterial({ 
@@ -333,7 +337,7 @@ socket.on('fireResult', (data) => {
         color: 0x888888, 
         side: THREE.DoubleSide, 
         transparent: true, 
-        opacity: 0.3 // 30% видимости (70% прозрачности)
+        opacity: 0.3 
     });
     const splashMesh = new THREE.Mesh(splashGeo, splashMat);
     splashMesh.position.y = -0.01; 
