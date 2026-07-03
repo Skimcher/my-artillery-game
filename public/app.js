@@ -15,9 +15,8 @@ const gltfLoader = new THREE.GLTFLoader();
 let sauModelTemplate = null; 
 let sauCenterOffset = new THREE.Vector3(); 
 
-// Константы размеров
-const FIELD_SIZE = 25;       // 25 метров
-const EXPLOSION_RADIUS = 4;  // 4 метра радиус взрыва
+const FIELD_SIZE = 25;       
+const DIRECT_RADIUS = 3;    // Радиус ямки при промахе теперь 3 метра
 
 // --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container');
@@ -27,7 +26,6 @@ scene.background = new THREE.Color(0xF5F2EB);
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 function updateCameraPosition() {
-    // Приподнимаем и отодвигаем камеру, так как поле боя увеличилось с 8 до 25 метров
     camera.position.set(0, 45, 35); 
     camera.lookAt(0, 0, 0);
 }
@@ -44,7 +42,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
 dirLight.position.set(30, 60, 20);
 scene.add(dirLight);
 
-// --- ГРАНИЦЫ ПОЛЕЙ (Вместо сетки делаем красивые желтые контуры полей) ---
+// --- ГРАНИЦЫ ПОЛЕЙ ---
 function createFieldOutline() {
     const geometry = new THREE.BufferGeometry();
     const half = FIELD_SIZE / 2;
@@ -62,16 +60,15 @@ function createFieldOutline() {
     return { line1, line2 };
 }
 const outlines = createFieldOutline();
-outlines.line1.position.set(0, 0.06, 15); // Центр поля P1
-outlines.line2.position.set(0, 0.06, -15); // Центр поля P2
+outlines.line1.position.set(0, 0.06, 15); 
+outlines.line2.position.set(0, 0.06, -15); 
 scene.add(outlines.line1, outlines.line2);
 
 let fieldClickPlanes = [];
 
-// --- ЗАГРУЗКА ТЕКСТУРЫ И СОЗДАНИЕ ПЛАТФОРМ ---
+// --- СОЗДАНИЕ ПЛАТФОРМ ---
 const textureLoader = new THREE.TextureLoader();
 const battlefieldTexture = textureLoader.load('/assets/battlefield.jpg');
-// Повторяем текстуру, чтобы она не размывалась на большом поле
 battlefieldTexture.wrapS = THREE.RepeatWrapping;
 battlefieldTexture.wrapT = THREE.RepeatWrapping;
 battlefieldTexture.repeat.set(3, 3);
@@ -83,12 +80,10 @@ function createBattlefields() {
     const visualField1 = new THREE.Mesh(fieldGeometry, fieldMaterial);
     const visualField2 = new THREE.Mesh(fieldGeometry, fieldMaterial);
 
-    // Разносим поля на безопасное расстояние друг от друга (центры на +15 и -15)
     visualField1.position.set(0, 0, 15);
     visualField2.position.set(0, 0, -15);
     scene.add(visualField1, visualField2);
 
-    // Создаем две сплошные невидимые плоскости для рейкастинга кликов
     const clickGeo = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE);
     clickGeo.rotateX(-Math.PI / 2);
     const clickMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -106,7 +101,7 @@ function createBattlefields() {
 }
 createBattlefields();
 
-// --- ЗАГРУЗКА МОДЕЛИ И МАСШТАБИРОВАНИЕ ПОД 3 МЕТРА ---
+// --- ЗАГРУЗКА МОДЕЛИ (+15% К РАЗМЕРУ = 3.45 МЕТРА) ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
@@ -114,7 +109,7 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     box.getSize(size);
     
     const maxDim = Math.max(size.x, size.y, size.z);
-    const targetSize = 3.0; // ТЕПЕРЬ МОДЕЛЬ РОВНО 3 МЕТРА
+    const targetSize = 3.45; // МОДЕЛЬ УВЕЛИЧЕНА НА 15%
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
@@ -127,11 +122,10 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     if (gameState) renderUnits();
 });
 
-// --- ОТРИСОВКА ЮНИТОВ НА СВОБОДНЫХ КООРДИНАТАХ ---
-function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner) {
+// --- ОТРИСОВКА ЮНИТОВ И HP-БАРА ---
+function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, hp) {
     const group = new THREE.Group();
     
-    // Переводим локальные координаты сервера (0..25) в мировые 3D координаты сцены
     const offsetZ = (owner === 'p1') ? 15 : -15;
     const worldX = serverX - (FIELD_SIZE / 2);
     const worldZ = serverY - (FIELD_SIZE / 2) + offsetZ;
@@ -141,8 +135,8 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner) {
     scene.add(group);
     visualUnits[id] = group;
 
-    // Круг под пушкой тоже адаптируем под размер 3 метра
-    const ringGeo = new THREE.RingGeometry(0.8, 0.9, 32); 
+    // Подстраиваем размер кольца под увеличенную пушку
+    const ringGeo = new THREE.RingGeometry(0.9, 1.0, 32); 
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ color: isDestroyed ? 0x222222 : ringColor, side: THREE.DoubleSide });
     const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -163,11 +157,58 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner) {
         });
         group.add(model);
     }
+
+    // СОЗДАНИЕ ДИНАМИЧЕСКОГО ИНТЕРФЕЙСА ЖИЗНИ (HP-БАР) В HTML DOM
+    let hpContainer = document.getElementById(`hp-container-${id}`);
+    if (!hpContainer) {
+        hpContainer = document.createElement('div');
+        hpContainer.id = `hp-container-${id}`;
+        hpContainer.className = 'hp-bar-container';
+        hpContainer.innerHTML = `<div class="hp-bar-fill"></div><span class="hp-bar-text"></span>`;
+        document.body.appendChild(hpContainer);
+    }
+
+    if (isDestroyed) {
+        hpContainer.style.display = 'none'; // Скрываем плашку, если юнит мертв
+    } else {
+        hpContainer.style.display = 'block';
+        const fill = hpContainer.querySelector('.hp-bar-fill');
+        const text = hpContainer.querySelector('.hp-bar-text');
+        fill.style.width = `${hp}%`;
+        text.innerText = `${hp} HP`;
+    }
+
+    group.userData = { domId: `hp-container-${id}` };
+}
+
+// Обновление позиций HTML-плашек поверх 3D объектов
+function updateHpBarsPositions() {
+    const tempV = new THREE.Vector3();
+    Object.keys(visualUnits).forEach(id => {
+        const group = visualUnits[id];
+        const domId = group.userData.domId;
+        const domEl = document.getElementById(domId);
+        
+        if (domEl && domEl.style.display !== 'none') {
+            // Получаем центр САУ и поднимаем точку чуть выше модели
+            group.getWorldPosition(tempV);
+            tempV.y += 2.2; 
+            
+            // Проецируем 3D-точку на 2D-экран камеры
+            tempV.project(camera);
+            
+            // Превращаем нормализованные координаты (-1..1) в пиксели
+            const x = (tempV.x *  .5 + .5) * window.innerWidth;
+            const y = (tempV.y * -.5 + .5) * window.innerHeight;
+            
+            domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
+        }
+    });
 }
 
 function createSplash(serverX, serverY, targetRole, type) {
-    const color = (type === 'hit') ? 0xffa500 : 0x5c4033; 
-    const particleCount = 25; // Больше частиц для большого взрыва
+    const color = (type === 'hit' || type === 'splash') ? 0xffa500 : 0x5c4033; 
+    const particleCount = 25;
 
     const offsetZ = (targetRole === 'p1') ? 15 : -15;
     const worldX = serverX - (FIELD_SIZE / 2);
@@ -201,7 +242,7 @@ function spawnFireAndSmoke() {
     });
 }
 
-// --- UI AND CONTROLS ---
+// --- UI CONTROLS ---
 const btnFire = document.getElementById('btn-fire');
 const btnMove = document.getElementById('btn-move');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -211,9 +252,8 @@ const controls = document.getElementById('controls');
 btnFire.addEventListener('click', (e) => { e.stopPropagation(); if (hasDoneActionThisTurn) return; currentMode = 'fire'; btnFire.classList.add('active'); btnMove.classList.remove('active'); });
 btnMove.addEventListener('click', (e) => { e.stopPropagation(); if (hasDoneActionThisTurn) return; currentMode = 'move'; btnMove.classList.add('active'); btnFire.classList.remove('active'); });
 
-// --- СВОБОДНЫЙ ВЫБОР ТОЧКИ КЛИКА ---
 window.addEventListener('click', (event) => {
-    if (event.target.tagName === 'BUTTON' || event.target.id === 'controls') return;
+    if (event.target.tagName === 'BUTTON' || event.target.id === 'controls' || event.target.closest('.hp-bar-container')) return;
     if (!gameState || gameState.turn !== myId || hasDoneActionThisTurn) return;
 
     const raycaster = new THREE.Raycaster();
@@ -230,7 +270,6 @@ window.addEventListener('click', (event) => {
         const planeZ = hit.point.z;
         const clickedPlaneRole = hit.object.userData.targetRole;
 
-        // Превращаем глобальные 3D координаты клика обратно в плоские (0..25) для сервера
         const offsetZ = (clickedPlaneRole === 'p1') ? 15 : -15;
         const serverX = planeX + (FIELD_SIZE / 2);
         const serverY = planeZ + (FIELD_SIZE / 2) - offsetZ;
@@ -240,14 +279,12 @@ window.addEventListener('click', (event) => {
             socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY, forcedRole: myRole });
         } 
         else if (currentMode === 'move') {
-            // Перемещаться можно только по своей собственной платформе!
             if (clickedPlaneRole !== myRole) return; 
 
             const targetUnits = gameState.players[myRole].units;
             const aliveUnits = targetUnits.filter(u => !u.destroyed);
             if (aliveUnits.length === 0) return;
 
-            // Выбираем ближайшую живую пушку к точке клика для перемещения её туда
             let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
             if (aliveUnits.length > 1) {
                 const d0 = Math.hypot(aliveUnits[0].x - serverX, aliveUnits[0].y - serverY);
@@ -261,7 +298,7 @@ window.addEventListener('click', (event) => {
     }
 });
 
-// --- NETWORK NETWORK NETWORK ---
+// --- NETWORK ---
 socket.emit('joinGame');
 socket.on('waiting', () => { turnIndicator.innerText = "Waiting for opponent..."; });
 socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
@@ -269,7 +306,7 @@ socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
 socket.on('turnChanged', (data) => { if (!gameState) return; gameState.turn = data.turn; timerDisplay.innerText = data.timer; hasDoneActionThisTurn = false; updateTurnUI(); });
 socket.on('gameStateUpdate', (newState) => { gameState = newState; renderUnits(); });
 
-// Воронка от промаха теперь соответствует радиусу взрыва (4 метра)
+// Воронка на поле только при полном промахе (result === 'miss')
 socket.on('fireResult', (data) => {
     createSplash(data.x, data.y, data.targetRole, data.result);
 
@@ -278,8 +315,8 @@ socket.on('fireResult', (data) => {
         const worldX = data.x - (FIELD_SIZE / 2);
         const worldZ = data.y - (FIELD_SIZE / 2) + offsetZ;
 
-        // Взрыв большой — радиус кольца воронки делаем под стать (2.0 метра)
-        const holeGeo = new THREE.RingGeometry(0, EXPLOSION_RADIUS * 0.5, 32); 
+        // Размер ямки равен новому радиусу прямого попадания (3 метра)
+        const holeGeo = new THREE.RingGeometry(0, DIRECT_RADIUS * 0.5, 32); 
         holeGeo.rotateX(-Math.PI / 2); 
         const holeMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
         const holeMesh = new THREE.Mesh(holeGeo, holeMat);
@@ -291,7 +328,12 @@ socket.on('fireResult', (data) => {
     }
 });
 
-socket.on('gameOver', (data) => { alert(data.winner === myId ? "VICTORY!" : "DEFEAT!"); window.location.reload(); });
+socket.on('gameOver', (data) => { 
+    // Скрываем все полоски HP перед выходом
+    document.querySelectorAll('.hp-bar-container').forEach(el => el.remove());
+    alert(data.winner === myId ? "VICTORY!" : "DEFEAT!"); 
+    window.location.reload(); 
+});
 
 function updateTurnUI() {
     if (gameState.turn === myId) {
@@ -303,6 +345,7 @@ function updateTurnUI() {
 }
 
 function renderUnits() {
+    // Чистим старые группы перед перерисовкой
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     burningUnitsPositions.length = 0; 
     
@@ -310,16 +353,24 @@ function renderUnits() {
 
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
-            // Флаг тумана войны: если координаты скрыты сервером (-1000), не рендерим модель
-            if (unit.x === -1000 || unit.y === -1000) return;
-            createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1');
+            if (unit.x === -1000 || unit.y === -1000) {
+                // Прячем HP-бар вражеского юнита, если он в тумане войны
+                const el = document.getElementById(`hp-container-p1_${index}`);
+                if (el) el.style.display = 'none';
+                return;
+            }
+            createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1', unit.hp);
             if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) + 15 });
         });
     }
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
-            if (unit.x === -1000 || unit.y === -1000) return;
-            createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2');
+            if (unit.x === -1000 || unit.y === -1000) {
+                const el = document.getElementById(`hp-container-p2_${index}`);
+                if (el) el.style.display = 'none';
+                return;
+            }
+            createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
             if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) - 15 });
         });
     }
@@ -328,6 +379,10 @@ function renderUnits() {
 function animate() {
     requestAnimationFrame(animate);
     spawnFireAndSmoke();
+    
+    // Пересчитываем положение HTML-плашек поверх экрана
+    updateHpBarsPositions();
+
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.mesh.position.x += p.vX; p.mesh.position.y += p.vY; p.mesh.position.z += p.vZ;
