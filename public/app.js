@@ -15,8 +15,10 @@ const gltfLoader = new THREE.GLTFLoader();
 let sauModelTemplate = null; 
 let sauCenterOffset = new THREE.Vector3(); 
 
+// Константы размеров игры
 const FIELD_SIZE = 25;       
-const DIRECT_RADIUS = 3;    // Радиус ямки при промахе теперь 3 метра
+const DIRECT_RADIUS = 3;     // Первый радиус (черный кружок)
+const SPLASH_RADIUS = 6;     // Второй радиус (серый кружок)
 
 // --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container');
@@ -101,7 +103,7 @@ function createBattlefields() {
 }
 createBattlefields();
 
-// --- ЗАГРУЗКА МОДЕЛИ (+15% К РАЗМЕРУ = 3.45 МЕТРА) ---
+// --- ЗАГРУЗКА МОДЕЛИ САУ (+15% = 3.45 МЕТРА) ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
@@ -109,7 +111,7 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     box.getSize(size);
     
     const maxDim = Math.max(size.x, size.y, size.z);
-    const targetSize = 3.45; // МОДЕЛЬ УВЕЛИЧЕНА НА 15%
+    const targetSize = 3.45; 
     const scaleFactor = targetSize / maxDim;
     sauModelTemplate.scale.set(scaleFactor, scaleFactor, scaleFactor);
     
@@ -135,7 +137,6 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     scene.add(group);
     visualUnits[id] = group;
 
-    // Подстраиваем размер кольца под увеличенную пушку
     const ringGeo = new THREE.RingGeometry(0.9, 1.0, 32); 
     ringGeo.rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ color: isDestroyed ? 0x222222 : ringColor, side: THREE.DoubleSide });
@@ -158,7 +159,6 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
         group.add(model);
     }
 
-    // СОЗДАНИЕ ДИНАМИЧЕСКОГО ИНТЕРФЕЙСА ЖИЗНИ (HP-БАР) В HTML DOM
     let hpContainer = document.getElementById(`hp-container-${id}`);
     if (!hpContainer) {
         hpContainer = document.createElement('div');
@@ -169,7 +169,7 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     }
 
     if (isDestroyed) {
-        hpContainer.style.display = 'none'; // Скрываем плашку, если юнит мертв
+        hpContainer.style.display = 'none'; 
     } else {
         hpContainer.style.display = 'block';
         const fill = hpContainer.querySelector('.hp-bar-fill');
@@ -181,7 +181,6 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     group.userData = { domId: `hp-container-${id}` };
 }
 
-// Обновление позиций HTML-плашек поверх 3D объектов
 function updateHpBarsPositions() {
     const tempV = new THREE.Vector3();
     Object.keys(visualUnits).forEach(id => {
@@ -190,14 +189,11 @@ function updateHpBarsPositions() {
         const domEl = document.getElementById(domId);
         
         if (domEl && domEl.style.display !== 'none') {
-            // Получаем центр САУ и поднимаем точку чуть выше модели
             group.getWorldPosition(tempV);
             tempV.y += 2.2; 
             
-            // Проецируем 3D-точку на 2D-экран камеры
             tempV.project(camera);
             
-            // Превращаем нормализованные координаты (-1..1) в пиксели
             const x = (tempV.x *  .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
             
@@ -306,30 +302,59 @@ socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
 socket.on('turnChanged', (data) => { if (!gameState) return; gameState.turn = data.turn; timerDisplay.innerText = data.timer; hasDoneActionThisTurn = false; updateTurnUI(); });
 socket.on('gameStateUpdate', (newState) => { gameState = newState; renderUnits(); });
 
-// Воронка на поле только при полном промахе (result === 'miss')
+// --- ВИЗУАЛИЗАЦИЯ ПОПАДАНИЙ И РАДИУСОВ ВЗРЫВА ---
 socket.on('fireResult', (data) => {
+    // 1. Создаем фонтан разлетающихся частиц земли/огня
     createSplash(data.x, data.y, data.targetRole, data.result);
 
-    if (data.result === 'miss') {
-        const offsetZ = (data.targetRole === 'p1') ? 15 : -15;
-        const worldX = data.x - (FIELD_SIZE / 2);
-        const worldZ = data.y - (FIELD_SIZE / 2) + offsetZ;
+    // Вычисляем мировые координаты центра взрыва
+    const offsetZ = (data.targetRole === 'p1') ? 15 : -15;
+    const worldX = data.x - (FIELD_SIZE / 2);
+    const worldZ = data.y - (FIELD_SIZE / 2) + offsetZ;
 
-        // Размер ямки равен новому радиусу прямого попадания (3 метра)
-        const holeGeo = new THREE.RingGeometry(0, DIRECT_RADIUS * 0.5, 32); 
-        holeGeo.rotateX(-Math.PI / 2); 
-        const holeMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
-        const holeMesh = new THREE.Mesh(holeGeo, holeMat);
-        
-        holeMesh.position.set(worldX, 0.07, worldZ);
-        scene.add(holeMesh);
+    // Группа для хранения обоих кругов радиусов
+    const explosionGroup = new THREE.Group();
+    explosionGroup.position.set(worldX, 0.07, worldZ);
+    scene.add(explosionGroup);
 
-        setTimeout(() => { scene.remove(holeMesh); holeGeo.dispose(); holeMat.dispose(); }, 2000);
-    }
+    // 2. ПЕРВЫЙ РАДИУС ПОПАДАНИЯ (Черный кружок, 3 метра)
+    // В Three.js используется радиус, поэтому DIRECT_RADIUS (3м) передаем напрямую
+    const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32);
+    directGeo.rotateX(-Math.PI / 2);
+    const directMat = new THREE.MeshBasicMaterial({ 
+        color: 0x111111, 
+        side: THREE.DoubleSide, 
+        transparent: true, 
+        opacity: 0.85 
+    });
+    const directMesh = new THREE.Mesh(directGeo, directMat);
+    explosionGroup.add(directMesh);
+
+    // 3. ВТОРОЙ РАДИУС ОСКОЛКОВ (Серый кружок, 6 метров, 70% прозрачности)
+    const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32);
+    splashGeo.rotateX(-Math.PI / 2);
+    const splashMat = new THREE.MeshBasicMaterial({ 
+        color: 0x888888, 
+        side: THREE.DoubleSide, 
+        transparent: true, 
+        opacity: 0.3 // 30% видимости (70% прозрачности)
+    });
+    const splashMesh = new THREE.Mesh(splashGeo, splashMat);
+    // Приподнимаем на мизерную долю миллиметра ниже черного, чтобы текстуры не мерцали (Z-fighting)
+    splashMesh.position.y = -0.01; 
+    explosionGroup.add(splashMesh);
+
+    // Удаляем оба круга с арены ровно через 2 секунды (2000 мс)
+    setTimeout(() => {
+        scene.remove(explosionGroup);
+        directGeo.dispose();
+        directMat.dispose();
+        splashGeo.dispose();
+        splashMat.dispose();
+    }, 2000);
 });
 
 socket.on('gameOver', (data) => { 
-    // Скрываем все полоски HP перед выходом
     document.querySelectorAll('.hp-bar-container').forEach(el => el.remove());
     alert(data.winner === myId ? "VICTORY!" : "DEFEAT!"); 
     window.location.reload(); 
@@ -345,7 +370,6 @@ function updateTurnUI() {
 }
 
 function renderUnits() {
-    // Чистим старые группы перед перерисовкой
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     burningUnitsPositions.length = 0; 
     
@@ -354,7 +378,6 @@ function renderUnits() {
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
             if (unit.x === -1000 || unit.y === -1000) {
-                // Прячем HP-бар вражеского юнита, если он в тумане войны
                 const el = document.getElementById(`hp-container-p1_${index}`);
                 if (el) el.style.display = 'none';
                 return;
@@ -379,8 +402,6 @@ function renderUnits() {
 function animate() {
     requestAnimationFrame(animate);
     spawnFireAndSmoke();
-    
-    // Пересчитываем положение HTML-плашек поверх экрана
     updateHpBarsPositions();
 
     for (let i = particles.length - 1; i >= 0; i--) {
