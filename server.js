@@ -11,12 +11,13 @@ expressApp.use(express.static('public'));
 let rooms = {}; 
 let waitingPlayer = null; 
 
-// Игровые параметры
-const FIELD_SIZE = 25;       
-const UNIT_RADIUS = 1.725;     // 3.45м / 2 (модель увеличена на 15%)
-const DIRECT_RADIUS = 3;       // Прямое попадание (0 HP)
-const SPLASH_RADIUS = 6;       // Радиус осколков (-51 HP)
+// --- ИГРОВЫЕ ПАРАМЕТРЫ ---
+const FIELD_SIZE = 25;       // Размер поля в метрах
+const UNIT_RADIUS = 1.725;   // 3.45м / 2 (размер 3D-модели +15%)
+const DIRECT_RADIUS = 3;     // Радиус прямого попадания (уничтожение, 0 HP)
+const SPLASH_RADIUS = 6;     // Радиус осколков (-51 HP)
 
+// Генерация случайных позиций САУ на поле боя
 function generateRandomUnits() {
     const min = UNIT_RADIUS;
     const max = FIELD_SIZE - UNIT_RADIUS;
@@ -35,6 +36,7 @@ function generateRandomUnits() {
         destroyed: false 
     };
     
+    // Проверка, чтобы пушки не заспавнились слишком близко друг к другу
     while (Math.hypot(u1.x - u2.x, u1.y - u2.y) < (UNIT_RADIUS * 2)) {
         u2.x = min + Math.random() * (max - min);
         u2.y = min + Math.random() * (max - min);
@@ -102,6 +104,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- ОБРАБОТКА ХОДА ИГРОКА ---
     socket.on('playerAction', (data) => {
         let roomId = null;
         for (const r of socket.rooms) {
@@ -116,31 +119,42 @@ io.on('connection', (socket) => {
         let targetX = Math.max(0, Math.min(FIELD_SIZE, data.x));
         let targetY = Math.max(0, Math.min(FIELD_SIZE, data.y));
 
+        // Логика стрельбы
         if (data.type === 'fire') {
-            let hitType = 'miss'; // Модификатор попадания для анимации эффектов
+            let hitType = 'miss'; 
 
             enemyPlayer.units.forEach(u => {
                 if (!u.destroyed) {
                     const distance = Math.hypot(u.x - targetX, u.y - targetY);
                     
-                    // 1. Проверяем прямое попадание
+                    // 1. Прямое попадание (Взрыв задел корпус в радиусе 3м)
                     if (distance <= (DIRECT_RADIUS + UNIT_RADIUS)) {
                         u.hp = 0;
                         u.destroyed = true;
                         hitType = 'hit';
                     } 
-                    // 2. Проверяем попадание осколками (если не было прямого)
+                    // 2. Действие осколков (Взрыв задел корпус в радиусе 6м)
                     else if (distance <= (SPLASH_RADIUS + UNIT_RADIUS)) {
                         u.hp = Math.max(0, u.hp - 51);
-                        if (u.hp === 0) u.destroyed = true;
-                        if (hitType !== 'hit') hitType = 'splash'; // splash считается попаданием
+                        
+                        // Если здоровье упало до нуля, только тогда уничтожаем
+                        if (u.hp <= 0) {
+                            u.hp = 0;
+                            u.destroyed = true;
+                        }
+                        
+                        // Если до этого не было прямого попадания в другую цель, ставим статус осколков
+                        if (hitType !== 'hit') {
+                            hitType = 'splash'; 
+                        }
                     }
                 }
             });
             
-            // Отправляем результат клиентам (hit/splash — взрывы, miss — ямка)
+            // Отправляем тип попадания клиентам для красивых визуальных эффектов
             io.to(roomId).emit('fireResult', { result: hitType, x: targetX, y: targetY, targetRole: enemyPlayer.role });
 
+            // Проверка условий победы (остались ли живые САУ у противника)
             const aliveUnits = enemyPlayer.units.filter(u => !u.destroyed);
             if (aliveUnits.length === 0) {
                 io.to(roomId).emit('gameOver', { winner: currentPlayer.id });
@@ -153,9 +167,11 @@ io.on('connection', (socket) => {
             switchTurn(room);
         }
         
+        // Логика перемещения САУ
         if (data.type === 'move') {
             const unit = currentPlayer.units[data.unitIndex];
             if (unit && !unit.destroyed) {
+                // Ограничиваем перемещение с учетом радиуса пушки, чтобы она не вылетала за пределы 25х25 метров
                 unit.x = Math.max(UNIT_RADIUS, Math.min(FIELD_SIZE - UNIT_RADIUS, targetX));
                 unit.y = Math.max(UNIT_RADIUS, Math.min(FIELD_SIZE - UNIT_RADIUS, targetY));
                 
@@ -189,6 +205,7 @@ function sendMaskedStateToAll(room) {
     io.to(room.players.p2.id).emit('gameStateUpdate', getMaskedState(room, 'p2'));
 }
 
+// Туман войны: скрывает точные координаты живых врагов, оставляя информацию о HP
 function getMaskedState(room, role) {
     const state = {
         turn: room.turn,
@@ -197,7 +214,6 @@ function getMaskedState(room, role) {
         players: JSON.parse(JSON.stringify(room.players))
     };
     
-    // В тумане войны скрываем живые вражеские САУ (передаем hp, но прячем координаты)
     if (role === 'p1') {
         state.players.p2.units = state.players.p2.units.map(u => u.destroyed ? u : { x: -1000, y: -1000, hp: u.hp, destroyed: false });
     } else if (role === 'p2') {
