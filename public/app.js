@@ -15,10 +15,10 @@ const gltfLoader = new THREE.GLTFLoader();
 let sauModelTemplate = null; 
 let sauCenterOffset = new THREE.Vector3(); 
 
-// Константы размеров игры (Радиусы уменьшены по запросу)
+// Константы размеров игры (Со всеми вашими уменьшениями радиусов)
 const FIELD_SIZE = 25;       
-const DIRECT_RADIUS = 0.95;  // Уменьшен на 25% (Первый критический радиус / черный кружок)
-const SPLASH_RADIUS = 4.01;  // Уменьшен на 15% (Второй радиус осколков / серый кружок)
+const DIRECT_RADIUS = 0.97;  // Итоговый критический радиус (после всех уменьшений)
+const SPLASH_RADIUS = 4.13;  // Итоговый радиус осколков
 const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра
 
 // --- THREE.JS SETUP ---
@@ -55,6 +55,10 @@ updateCameraPosition();
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// Включаем правильное отображение встроенных текстур и цветов модели
+renderer.outputColorSpace = THREE.SRGBColorSpace; 
+
 container.appendChild(renderer.domElement);
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.85); 
@@ -162,12 +166,18 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     if (sauModelTemplate) {
         const model = sauModelTemplate.clone();
         model.position.set(sauCenterOffset.x, sauCenterOffset.y, sauCenterOffset.z);
+        
         model.traverse((child) => {
             if (child.isMesh) {
                 if (!isDestroyed) {
-                    child.material = new THREE.MeshStandardMaterial({ color: 0xbfa37a, roughness: 0.75 });
+                    // Используем ОРИГИНАЛЬНЫЕ текстуры и материалы вашей модели
+                    child.material.needsUpdate = true;
                 } else {
-                    child.material = new THREE.MeshStandardMaterial({ color: 0x423829, roughness: 0.95, transparent: true, opacity: 0.45 });
+                    // Для уничтоженной техники клонируем родной материал и делаем его темным/прозрачным
+                    child.material = child.material.clone();
+                    if (child.material.color) child.material.color.setHex(0x222222);
+                    child.material.transparent = true;
+                    child.material.opacity = 0.45;
                 }
             }
         });
@@ -246,7 +256,7 @@ function updateHpBarsPositions() {
 }
 
 function createSplash(serverX, serverY, targetRole, type) {
-    const color = 0x5c4033; 
+    const color = 0x5c4033; // Коричневая земля
     const particleCount = 25;
 
     const offsetZ = (targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
