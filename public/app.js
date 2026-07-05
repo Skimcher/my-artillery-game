@@ -24,8 +24,30 @@ const DIRECT_RADIUS = 0.97;  // Итоговый критический ради
 const SPLASH_RADIUS = 4.13;  // Итоговый радиус осколков
 const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра
 
+// --- ДОБАВЛЯЕМ СТИЛИ ДЛЯ ИГРЫ ВО ВЕСЬ ЭКРАН ---
+const style = document.createElement('style');
+style.innerHTML = `
+    html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        position: fixed; /* Предотвращает случайный скролл/сдвиг на iOS */
+        background-color: #000;
+    }
+    #canvas-container {
+        width: 100vw;
+        height: 100vh;
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+`;
+document.head.appendChild(style);
+
 // --- THREE.JS SETUP ---
-const container = document.getElementById('canvas-container');
+const container = document.getElementById('canvas-container') || document.body;
 const scene = new THREE.Scene();
 
 // Загрузка вашего JPG файла в качестве фонового изображения сцены
@@ -313,39 +335,31 @@ function spawnFireAndSmoke() {
     });
 }
 
-// --- ДИНАМИЧЕСКОЕ СОЗДАНИЕ ИНТЕРФЕЙСА ГАРАНТИРУЕТ ИХ НАЛИЧИЕ ---
-let turnIndicator = document.getElementById('turn-indicator');
-let timerDisplay = document.getElementById('timer');
-
-// Если вдруг главного контейнера в HTML нет, создаем структуру программно
-let uiContainer = document.getElementById('ui-container') || (turnIndicator ? turnIndicator.parentElement : null);
+// --- СОЗДАНИЕ И ПОЗИЦИОНИРОВАНИЕ ИНТЕРФЕЙСА ПО ЦЕНТРУ ЭКРАНА ---
+let uiContainer = document.getElementById('ui-container');
 if (!uiContainer) {
     uiContainer = document.createElement('div');
     uiContainer.id = 'ui-container';
     document.body.appendChild(uiContainer);
 }
 
-if (!turnIndicator) {
-    turnIndicator = document.createElement('div');
-    turnIndicator.id = 'turn-indicator';
-    turnIndicator.innerText = "Connecting...";
-    uiContainer.appendChild(turnIndicator);
-}
+// Очистим старое, если оно было в HTML, чтобы избежать дублей
+uiContainer.innerHTML = '';
 
-if (!timerDisplay) {
-    timerDisplay = document.createElement('div');
-    timerDisplay.id = 'timer';
-    timerDisplay.innerText = "0";
-    timerDisplay.style.position = 'absolute';
-    timerDisplay.style.top = '10px';
-    timerDisplay.style.right = '20px';
-    timerDisplay.style.color = '#fff';
-    timerDisplay.style.fontSize = '24px';
-    timerDisplay.style.fontFamily = 'sans-serif';
-    document.body.appendChild(timerDisplay);
-}
+// 1. Надпись ходов (YOUR TURN / OPPONENT'S TURN)
+const turnIndicator = document.createElement('div');
+turnIndicator.id = 'turn-indicator';
+turnIndicator.innerText = "Connecting...";
+uiContainer.appendChild(turnIndicator);
 
-// Создаем блок управления с кнопками с нуля, полностью игнорируя HTML
+// 2. Блок таймера со словом TIME вместо Время
+const timerBlock = document.createElement('div');
+timerBlock.id = 'timer-block';
+timerBlock.innerHTML = `TIME: <span id="timer-val">0</span>`;
+uiContainer.appendChild(timerBlock);
+const timerDisplay = document.getElementById('timer-val');
+
+// 3. Блок с кнопками FIRE и MOVE
 const controls = document.createElement('div');
 controls.id = 'controls';
 uiContainer.appendChild(controls);
@@ -360,11 +374,44 @@ btnMove.id = 'btn-move';
 btnMove.innerText = 'MOVE';
 controls.appendChild(btnMove);
 
-// Стилизация кнопок
-const styleButtons = () => {
+// Стилизация интерфейса (Сборка по центру экрана сверху вниз)
+const styleUI = () => {
+    // Главный родительский контейнер строго по центру
+    uiContainer.style.position = 'absolute';
+    uiContainer.style.top = '15px';
+    uiContainer.style.left = '50%';
+    uiContainer.style.transform = 'translateX(-50%)';
+    uiContainer.style.display = 'flex';
+    uiContainer.style.flexDirection = 'column';
+    uiContainer.style.alignItems = 'center';
+    uiContainer.style.width = '100vw';
+    uiContainer.style.pointerEvents = 'none';
+    uiContainer.style.zIndex = '99999';
+    uiContainer.style.textAlign = 'center';
+
+    // Стили индикатора хода (Центровка + Тень)
+    turnIndicator.style.fontFamily = 'sans-serif';
+    turnIndicator.style.fontWeight = 'bold';
+    turnIndicator.style.textShadow = '2px 2px 4px #000000';
+    turnIndicator.style.pointerEvents = 'auto';
+    turnIndicator.style.margin = '0';
+
+    // Стили таймера TIME по центру под ходом
+    timerBlock.style.fontFamily = 'sans-serif';
+    timerBlock.style.fontWeight = 'bold';
+    timerBlock.style.color = '#ffffff';
+    timerBlock.style.textShadow = '2px 2px 4px #000000';
+    timerBlock.style.margin = '5px 0 10px 0';
+    timerBlock.style.pointerEvents = 'auto';
+
+    // Стили контейнера кнопок под таймером
+    controls.style.position = 'static';
+    controls.style.transform = 'none';
+    controls.style.gap = '15px';
+    controls.style.pointerEvents = 'auto';
+
+    // Базовые стили для кнопок FIRE и MOVE
     [btnFire, btnMove].forEach(btn => {
-        btn.style.padding = '12px 24px';
-        btn.style.fontSize = '16px';
         btn.style.fontWeight = 'bold';
         btn.style.cursor = 'pointer';
         btn.style.color = '#ffffff';
@@ -374,7 +421,7 @@ const styleButtons = () => {
         btn.style.boxShadow = '0px 4px 6px rgba(0,0,0,0.4)';
     });
 };
-styleButtons();
+styleUI();
 
 function updateButtonVisuals() {
     if (currentMode === 'fire') {
@@ -393,40 +440,18 @@ function updateButtonVisuals() {
 function applyMobileLayout() {
     const isMobile = window.innerWidth <= 768;
     
-    // Стили главного родительского UI-контейнера
-    uiContainer.style.position = 'absolute';
-    uiContainer.style.top = isMobile ? '12px' : '25px';
-    uiContainer.style.left = '50%';
-    uiContainer.style.transform = 'translateX(-50%)';
-    uiContainer.style.display = 'flex';
-    uiContainer.style.flexDirection = 'column';
-    uiContainer.style.alignItems = 'center';
-    uiContainer.style.width = '100%';
-    uiContainer.style.pointerEvents = 'none';
-    uiContainer.style.zIndex = '99999';
-
-    // Уменьшение текста ровно в 2 раза на мобильных (32px на ПК -> 16px на мобилках)
+    // Пересчитываем размеры текста (на мобильных — ровно в 2 раза меньше)
     turnIndicator.style.fontSize = isMobile ? '16px' : '32px';
-    turnIndicator.style.margin = '0 0 12px 0';
-    turnIndicator.style.fontWeight = 'bold';
-    turnIndicator.style.fontFamily = 'sans-serif';
-    turnIndicator.style.textShadow = '2px 2px 4px #000000';
-    turnIndicator.style.pointerEvents = 'auto';
+    timerBlock.style.fontSize = isMobile ? '13px' : '26px';
 
-    // Позиционируем блок controls строго ПОД надписью turn-indicator
-    controls.style.position = 'static';
-    controls.style.transform = 'none';
-    controls.style.margin = '5px 0 0 0';
-    controls.style.gap = '15px';
-    controls.style.pointerEvents = 'auto';
-
-    // Адаптируем размер кнопок для мобильных экранов
+    // Адаптируем кнопки под мобильный
+    controls.style.flexDirection = 'row';
     [btnFire, btnMove].forEach(btn => {
         btn.style.padding = isMobile ? '8px 18px' : '12px 24px';
         btn.style.fontSize = isMobile ? '14px' : '16px';
     });
 
-    // Управление видимостью
+    // Управление видимостью кнопок
     const isMyTurn = gameState && gameState.turn === myId;
     if (!gameState || hasDoneActionThisTurn || !isMyTurn) {
         controls.style.setProperty('display', 'none', 'important');
@@ -526,7 +551,8 @@ window.addEventListener('click', (event) => {
 // --- NETWORK ---
 socket.emit('joinGame');
 socket.on('waiting', () => { 
-    turnIndicator.innerText = "Waiting for opponent..."; 
+    turnIndicator.innerText = "WAITING FOR OPPONENT..."; 
+    turnIndicator.style.color = "#ffa500";
     applyMobileLayout(); 
 });
 socket.on('gameStart', (data) => { 
