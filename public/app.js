@@ -326,6 +326,7 @@ function applyMobileLayout() {
     const isMobile = window.innerWidth <= 768;
     const uiContainer = turnIndicator.parentElement;
     
+    // Стилизация главного контейнера UI
     if (uiContainer) {
         uiContainer.style.position = 'absolute';
         uiContainer.style.top = isMobile ? '10px' : '20px';
@@ -336,35 +337,31 @@ function applyMobileLayout() {
         uiContainer.style.alignItems = 'center';
         uiContainer.style.width = '100%';
         uiContainer.style.pointerEvents = 'none';
+        uiContainer.style.zIndex = '99999';
     }
 
-    // Изменение размера текста ровно в 2 раза на мобильных (32px на ПК -> 16px на мобильных)
+    // Изменение размера текста ровно в 2 раза на мобильных (32px -> 16px)
     turnIndicator.style.fontSize = isMobile ? '16px' : '32px';
-    turnIndicator.style.margin = '0 0 12px 0';
+    turnIndicator.style.margin = '0 0 10px 0';
+    turnIndicator.style.fontWeight = 'bold';
+    turnIndicator.style.fontFamily = 'sans-serif';
+    turnIndicator.style.textShadow = '2px 2px 4px #000000';
     turnIndicator.style.pointerEvents = 'auto';
 
-    // Позиционируем кнопки ПРЯМО под надписью
-    if (isMobile) {
-        controls.style.position = 'static';
-        controls.style.transform = 'none';
-        controls.style.margin = '5px 0 0 0';
-    } else {
-        controls.style.position = 'absolute';
-        controls.style.bottom = '30px';
-    }
-    
-    // Проверяем, чей ход, защищаясь от null-значений на старте
+    // Позиционируем блок кнопок controls строго ПОД надписью turn-indicator
+    controls.style.position = 'static';
+    controls.style.transform = 'none';
+    controls.style.margin = '5px 0 0 0';
+    controls.style.gap = '15px';
+    controls.style.pointerEvents = 'auto';
+
+    // Железно управляем отображением кнопок (скрываем только если не наш ход или действие выполнено)
     const isMyTurn = gameState && gameState.turn === myId;
-    
-    if (hasDoneActionThisTurn || !isMyTurn) {
+    if (!gameState || hasDoneActionThisTurn || !isMyTurn) {
         controls.style.setProperty('display', 'none', 'important');
     } else {
         controls.style.setProperty('display', 'flex', 'important');
     }
-    
-    controls.style.flexDirection = 'row';
-    controls.style.gap = '10px';
-    controls.style.pointerEvents = 'auto';
 }
 
 btnFire.addEventListener('click', (e) => { 
@@ -457,8 +454,17 @@ window.addEventListener('click', (event) => {
 
 // --- NETWORK ---
 socket.emit('joinGame');
-socket.on('waiting', () => { turnIndicator.innerText = "Waiting for opponent..."; applyMobileLayout(); });
-socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
+socket.on('waiting', () => { 
+    turnIndicator.innerText = "Waiting for opponent..."; 
+    applyMobileLayout(); 
+});
+socket.on('gameStart', (data) => { 
+    myRole = data.role; 
+    myId = socket.id; 
+    gameState = data.state; 
+    updateTurnUI(); 
+    renderUnits(); 
+});
 socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
 socket.on('turnChanged', (data) => { 
     if (!gameState) return; 
@@ -509,6 +515,8 @@ socket.on('gameOver', (data) => {
 });
 
 function updateTurnUI() {
+    if (!gameState) return;
+
     if (gameState.turn === myId) {
         turnIndicator.innerText = "YOUR TURN!"; 
         turnIndicator.style.color = "#2ed573";
@@ -584,5 +592,5 @@ window.addEventListener('resize', () => {
     applyMobileLayout(); 
 });
 
-// Первичная инициализация верстки при загрузке страницы
+// Первичная инициализация интерфейса при загрузке страницы
 setTimeout(applyMobileLayout, 100);
