@@ -7,6 +7,9 @@ let gameState = null;
 let currentMode = 'fire';   
 let hasDoneActionThisTurn = false; 
 
+let selectedUnitId = null;  // ID выбранной САУ для перемещения (например, 'p1_0')
+let selectionRing = null;   // Объект визуального кольца подсветки выбора
+
 const visualUnits = {};     
 const particles = []; 
 const burningUnitsPositions = []; 
@@ -17,7 +20,7 @@ let sauCenterOffset = new THREE.Vector3();
 
 // Константы размеров игры (Со всеми вашими уменьшениями радиусов)
 const FIELD_SIZE = 25;       
-const DIRECT_RADIUS = 0.97;  // Итоговый критический радиус (после всех уменьшений)
+const DIRECT_RADIUS = 0.97;  // Итоговый критический радиус
 const SPLASH_RADIUS = 4.13;  // Итоговый радиус осколков
 const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра
 
@@ -143,6 +146,28 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     if (gameState) renderUnits();
 });
 
+// --- ПОДСВЕТКА ВЫБРАННОЙ САУ ---
+function updateSelectionRing(unitGroup) {
+    if (selectionRing) {
+        if (selectionRing.parent) selectionRing.parent.remove(selectionRing);
+        selectionRing = null;
+    }
+    if (!unitGroup) return;
+
+    // Внешний радиус 3.0 метра, внутренний 2.85 для тонкого кольца
+    const ringGeo = new THREE.RingGeometry(2.85, 3.0, 32); 
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff, 
+        transparent: true, 
+        opacity: 0.5, 
+        side: THREE.DoubleSide 
+    });
+    selectionRing = new THREE.Mesh(ringGeo, ringMat);
+    selectionRing.position.y = 0.05; // Слегка приподнимаем над землей
+    unitGroup.add(selectionRing);
+}
+
 // --- ОТРИСОВКА ЮНИТОВ И HP-БАРА ---
 function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, hp) {
     const group = new THREE.Group();
@@ -256,7 +281,7 @@ function updateHpBarsPositions() {
 }
 
 function createSplash(serverX, serverY, targetRole, type) {
-    const color = 0x5c4033; // Коричневая земля
+    const color = 0x5c4033; 
     const particleCount = 25;
 
     const offsetZ = (targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
@@ -298,8 +323,24 @@ const turnIndicator = document.getElementById('turn-indicator');
 const timerDisplay = document.getElementById('timer');
 const controls = document.getElementById('controls');
 
-btnFire.addEventListener('click', (e) => { e.stopPropagation(); if (hasDoneActionThisTurn) return; currentMode = 'fire'; btnFire.classList.add('active'); btnMove.classList.remove('active'); });
-btnMove.addEventListener('click', (e) => { e.stopPropagation(); if (hasDoneActionThisTurn) return; currentMode = 'move'; btnMove.classList.add('active'); btnFire.classList.remove('active'); });
+btnFire.addEventListener('click', (e) => { 
+    e.stopPropagation(); 
+    if (hasDoneActionThisTurn) return; 
+    currentMode = 'fire'; 
+    btnFire.classList.add('active'); 
+    btnMove.classList.remove('active'); 
+    // Сбрасываем выбор при переключении на режим огня
+    if (selectionRing) updateSelectionRing(null);
+    selectedUnitId = null;
+});
+
+btnMove.addEventListener('click', (e) => { 
+    e.stopPropagation(); 
+    if (hasDoneActionThisTurn) return; 
+    currentMode = 'move'; 
+    btnMove.classList.add('active'); 
+    btnFire.classList.remove('active'); 
+});
 
 window.addEventListener('click', (event) => {
     if (event.target.tagName === 'BUTTON' || event.target.id === 'controls' || event.target.closest('.hp-bar-container')) return;
@@ -311,6 +352,38 @@ window.addEventListener('click', (event) => {
     pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     raycaster.setFromCamera(pointer, camera);
+
+    // --- ЛОГИКА ДЛЯ РЕЖИМА ХОДА (ВЫБОР САУ И КЛИК) ---
+    if (currentMode === 'move') {
+        const unitIntersects = raycaster.intersectObjects(Object.values(visualUnits), true);
+        
+        if (unitIntersects.length > 0) {
+            // Ищем верхний Group-объект, зарегистрированный в visualUnits
+            let clickedMesh = unitIntersects[0].object;
+            let currentObj = clickedMesh;
+            let foundId = null;
+
+            while (currentObj && currentObj !== scene) {
+                foundId = Object.keys(visualUnits).find(id => visualUnits[id] === currentObj);
+                if (foundId) break;
+                currentObj = currentObj.parent;
+            }
+
+            // Если кликнули по своей живой САУ
+            if (foundId && foundId.startsWith(myRole)) {
+                const unitIndex = parseInt(foundId.split('_')[1]);
+                const targetUnit = gameState.players[myRole].units[unitIndex];
+
+                if (targetUnit && !targetUnit.destroyed) {
+                    selectedUnitId = foundId;
+                    updateSelectionRing(visualUnits[foundId]); // Включаем подсветку 3м
+                    return; // Ждем клика по полю для перемещения
+                }
+            }
+        }
+    }
+
+    // --- КЛИК ПО ПОЛЮ И СОВЕРШЕНИЕ ДЕЙСТВИЯ ---
     const intersects = raycaster.intersectObjects(fieldClickPlanes);
 
     if (intersects.length > 0) {
@@ -328,21 +401,19 @@ window.addEventListener('click', (event) => {
             socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY, forcedRole: myRole });
         } 
         else if (currentMode === 'move') {
-            if (clickedPlaneRole !== myRole) return; 
-
-            const targetUnits = gameState.players[myRole].units;
-            const aliveUnits = targetUnits.filter(u => !u.destroyed);
-            if (aliveUnits.length === 0) return;
-
-            let targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[0]);
-            if (aliveUnits.length > 1) {
-                const d0 = Math.hypot(aliveUnits[0].x - serverX, aliveUnits[0].y - serverY);
-                const d1 = Math.hypot(aliveUnits[1].x - serverX, aliveUnits[1].y - serverY);
-                if (d1 < d0) targetUnitIndex = targetUnits.findIndex(u => u === aliveUnits[1]);
+            // Выполняем перемещение только если САУ уже выбрана
+            if (selectedUnitId && clickedPlaneRole === myRole) {
+                const unitIndex = parseInt(selectedUnitId.split('_')[1]);
+                
+                hasDoneActionThisTurn = true; 
+                controls.classList.add('hidden');
+                
+                // Убираем подсветку перед ходом
+                updateSelectionRing(null); 
+                
+                socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: unitIndex, forcedRole: myRole });
+                selectedUnitId = null;
             }
-            
-            hasDoneActionThisTurn = true; controls.classList.add('hidden');
-            socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: targetUnitIndex, forcedRole: myRole });
         }
     }
 });
@@ -352,7 +423,15 @@ socket.emit('joinGame');
 socket.on('waiting', () => { turnIndicator.innerText = "Waiting for opponent..."; });
 socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
 socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
-socket.on('turnChanged', (data) => { if (!gameState) return; gameState.turn = data.turn; timerDisplay.innerText = data.timer; hasDoneActionThisTurn = false; updateTurnUI(); });
+socket.on('turnChanged', (data) => { 
+    if (!gameState) return; 
+    gameState.turn = data.turn; 
+    timerDisplay.innerText = data.timer; 
+    hasDoneActionThisTurn = false; 
+    selectedUnitId = null;
+    updateSelectionRing(null);
+    updateTurnUI(); 
+});
 socket.on('gameStateUpdate', (newState) => { gameState = newState; renderUnits(); });
 
 socket.on('fireResult', (data) => {
@@ -402,6 +481,9 @@ function updateTurnUI() {
 }
 
 function renderUnits() {
+    // Сохраняем состояние подсветки перед перерисовкой
+    const activeIdBeforeRender = selectedUnitId;
+
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     burningUnitsPositions.length = 0; 
     
@@ -428,6 +510,12 @@ function renderUnits() {
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
             if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) - FIELD_OFFSET_Z });
         });
+    }
+
+    // Восстанавливаем подсветку, если юнит все еще существует
+    if (activeIdBeforeRender && visualUnits[activeIdBeforeRender]) {
+        selectedUnitId = activeIdBeforeRender;
+        updateSelectionRing(visualUnits[selectedUnitId]);
     }
 }
 
