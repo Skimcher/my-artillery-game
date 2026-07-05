@@ -176,7 +176,6 @@ function updateSelectionRing(unitGroup) {
     }
     if (!unitGroup) return;
 
-    // Используем PlaneGeometry радиусом 3 метра (размер 6x6) с круглой текстурой, либо RingGeometry с внутренним радиусом 0
     const ringGeo = new THREE.RingGeometry(0, 3.0, 32); 
     ringGeo.rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({ 
@@ -304,7 +303,6 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     group.userData = { domId: `hp-container-${id}` };
 }
 
-// Изменяем масштаб полосок HP динамически (в 2.5 раза меньше на мобильных — scale 0.8 вместо 2.0)
 function updateHpBarsPositions() {
     const tempV = new THREE.Vector3();
     const isMobile = window.innerWidth <= 768;
@@ -493,7 +491,7 @@ btnMove.addEventListener('click', (e) => {
     currentMode = 'move'; 
     updateButtonVisuals();
     
-    // При клике на MOVE выбираем случайный танк
+    // Подсвечиваем случайный танк на старте режима MOVE
     selectRandomAliveUnit();
 });
 
@@ -508,33 +506,34 @@ window.addEventListener('click', (event) => {
 
     raycaster.setFromCamera(pointer, camera);
 
-    if (currentMode === 'move') {
-        const unitIntersects = raycaster.intersectObjects(Object.values(visualUnits), true);
-        
-        if (unitIntersects.length > 0) {
-            let clickedMesh = unitIntersects[0].object;
-            let currentObj = clickedMesh;
-            let foundId = null;
+    // --- ЛОГИКА КЛИКА НА ОБЪЕКТЫ ---
+    const unitIntersects = raycaster.intersectObjects(Object.values(visualUnits), true);
+    
+    if (unitIntersects.length > 0) {
+        let clickedMesh = unitIntersects[0].object;
+        let currentObj = clickedMesh;
+        let foundId = null;
 
-            while (currentObj && currentObj !== scene) {
-                foundId = Object.keys(visualUnits).find(id => visualUnits[id] === currentObj);
-                if (foundId) break;
-                currentObj = currentObj.parent;
-            }
+        while (currentObj && currentObj !== scene) {
+            foundId = Object.keys(visualUnits).find(id => visualUnits[id] === currentObj);
+            if (foundId) break;
+            currentObj = currentObj.parent;
+        }
 
-            if (foundId && foundId.startsWith(myRole)) {
-                const unitIndex = parseInt(foundId.split('_')[1]);
-                const targetUnit = gameState.players[myRole].units[unitIndex];
+        // Если кликнули по своей САУ в режиме MOVE — меняем выбор вместо перемещения
+        if (currentMode === 'move' && foundId && foundId.startsWith(myRole)) {
+            const unitIndex = parseInt(foundId.split('_')[1]);
+            const targetUnit = gameState.players[myRole].units[unitIndex];
 
-                if (targetUnit && !targetUnit.destroyed) {
-                    selectedUnitId = foundId;
-                    updateSelectionRing(visualUnits[foundId]); 
-                    return; 
-                }
+            if (targetUnit && !targetUnit.destroyed) {
+                selectedUnitId = foundId;
+                updateSelectionRing(visualUnits[foundId]); 
+                return; // Выходим, чтобы клик не засчитался как команда хода в эту же точку
             }
         }
     }
 
+    // --- ЛОГИКА КЛИКА ПО ЗЕМЛЕ ---
     const intersects = raycaster.intersectObjects(fieldClickPlanes);
 
     if (intersects.length > 0) {
