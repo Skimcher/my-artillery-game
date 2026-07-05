@@ -313,73 +313,144 @@ function spawnFireAndSmoke() {
     });
 }
 
-// --- UI CONTROLS & MOBILE LAYOUT LOGIC ---
-const btnFire = document.getElementById('btn-fire');
-const btnMove = document.getElementById('btn-move');
-const turnIndicator = document.getElementById('turn-indicator');
-const timerDisplay = document.getElementById('timer');
-const controls = document.getElementById('controls');
+// --- ДИНАМИЧЕСКОЕ СОЗДАНИЕ ИНТЕРФЕЙСА ГАРАНТИРУЕТ ИХ НАЛИЧИЕ ---
+let turnIndicator = document.getElementById('turn-indicator');
+let timerDisplay = document.getElementById('timer');
+
+// Если вдруг главного контейнера в HTML нет, создаем структуру программно
+let uiContainer = document.getElementById('ui-container') || (turnIndicator ? turnIndicator.parentElement : null);
+if (!uiContainer) {
+    uiContainer = document.createElement('div');
+    uiContainer.id = 'ui-container';
+    document.body.appendChild(uiContainer);
+}
+
+if (!turnIndicator) {
+    turnIndicator = document.createElement('div');
+    turnIndicator.id = 'turn-indicator';
+    turnIndicator.innerText = "Connecting...";
+    uiContainer.appendChild(turnIndicator);
+}
+
+if (!timerDisplay) {
+    timerDisplay = document.createElement('div');
+    timerDisplay.id = 'timer';
+    timerDisplay.innerText = "0";
+    timerDisplay.style.position = 'absolute';
+    timerDisplay.style.top = '10px';
+    timerDisplay.style.right = '20px';
+    timerDisplay.style.color = '#fff';
+    timerDisplay.style.fontSize = '24px';
+    timerDisplay.style.fontFamily = 'sans-serif';
+    document.body.appendChild(timerDisplay);
+}
+
+// Создаем блок управления с кнопками с нуля, полностью игнорируя HTML
+const controls = document.createElement('div');
+controls.id = 'controls';
+uiContainer.appendChild(controls);
+
+const btnFire = document.createElement('button');
+btnFire.id = 'btn-fire';
+btnFire.innerText = 'FIRE';
+controls.appendChild(btnFire);
+
+const btnMove = document.createElement('button');
+btnMove.id = 'btn-move';
+btnMove.innerText = 'MOVE';
+controls.appendChild(btnMove);
+
+// Стилизация кнопок
+const styleButtons = () => {
+    [btnFire, btnMove].forEach(btn => {
+        btn.style.padding = '12px 24px';
+        btn.style.fontSize = '16px';
+        btn.style.fontWeight = 'bold';
+        btn.style.cursor = 'pointer';
+        btn.style.color = '#ffffff';
+        btn.style.borderRadius = '6px';
+        btn.style.border = '2px solid #555555';
+        btn.style.transition = 'all 0.1s ease';
+        btn.style.boxShadow = '0px 4px 6px rgba(0,0,0,0.4)';
+    });
+};
+styleButtons();
+
+function updateButtonVisuals() {
+    if (currentMode === 'fire') {
+        btnFire.style.background = '#2ed573';
+        btnFire.style.borderColor = '#ffffff';
+        btnMove.style.background = '#333333';
+        btnMove.style.borderColor = '#555555';
+    } else {
+        btnMove.style.background = '#1e90ff';
+        btnMove.style.borderColor = '#ffffff';
+        btnFire.style.background = '#333333';
+        btnFire.style.borderColor = '#555555';
+    }
+}
 
 function applyMobileLayout() {
-    if (!turnIndicator || !controls) return;
-    
     const isMobile = window.innerWidth <= 768;
-    const uiContainer = turnIndicator.parentElement;
     
-    // Стилизация главного контейнера UI
-    if (uiContainer) {
-        uiContainer.style.position = 'absolute';
-        uiContainer.style.top = isMobile ? '10px' : '20px';
-        uiContainer.style.left = '50%';
-        uiContainer.style.transform = 'translateX(-50%)';
-        uiContainer.style.display = 'flex';
-        uiContainer.style.flexDirection = 'column';
-        uiContainer.style.alignItems = 'center';
-        uiContainer.style.width = '100%';
-        uiContainer.style.pointerEvents = 'none';
-        uiContainer.style.zIndex = '99999';
-    }
+    // Стили главного родительского UI-контейнера
+    uiContainer.style.position = 'absolute';
+    uiContainer.style.top = isMobile ? '12px' : '25px';
+    uiContainer.style.left = '50%';
+    uiContainer.style.transform = 'translateX(-50%)';
+    uiContainer.style.display = 'flex';
+    uiContainer.style.flexDirection = 'column';
+    uiContainer.style.alignItems = 'center';
+    uiContainer.style.width = '100%';
+    uiContainer.style.pointerEvents = 'none';
+    uiContainer.style.zIndex = '99999';
 
-    // Изменение размера текста ровно в 2 раза на мобильных (32px -> 16px)
+    // Уменьшение текста ровно в 2 раза на мобильных (32px на ПК -> 16px на мобилках)
     turnIndicator.style.fontSize = isMobile ? '16px' : '32px';
-    turnIndicator.style.margin = '0 0 10px 0';
+    turnIndicator.style.margin = '0 0 12px 0';
     turnIndicator.style.fontWeight = 'bold';
     turnIndicator.style.fontFamily = 'sans-serif';
     turnIndicator.style.textShadow = '2px 2px 4px #000000';
     turnIndicator.style.pointerEvents = 'auto';
 
-    // Позиционируем блок кнопок controls строго ПОД надписью turn-indicator
+    // Позиционируем блок controls строго ПОД надписью turn-indicator
     controls.style.position = 'static';
     controls.style.transform = 'none';
     controls.style.margin = '5px 0 0 0';
     controls.style.gap = '15px';
     controls.style.pointerEvents = 'auto';
 
-    // Железно управляем отображением кнопок (скрываем только если не наш ход или действие выполнено)
+    // Адаптируем размер кнопок для мобильных экранов
+    [btnFire, btnMove].forEach(btn => {
+        btn.style.padding = isMobile ? '8px 18px' : '12px 24px';
+        btn.style.fontSize = isMobile ? '14px' : '16px';
+    });
+
+    // Управление видимостью
     const isMyTurn = gameState && gameState.turn === myId;
     if (!gameState || hasDoneActionThisTurn || !isMyTurn) {
         controls.style.setProperty('display', 'none', 'important');
     } else {
         controls.style.setProperty('display', 'flex', 'important');
     }
+    
+    updateButtonVisuals();
 }
 
 btnFire.addEventListener('click', (e) => { 
     e.stopPropagation(); 
     if (hasDoneActionThisTurn) return; 
     currentMode = 'fire'; 
-    btnFire.classList.add('active'); 
-    btnMove.classList.remove('active'); 
     if (selectionRing) updateSelectionRing(null);
     selectedUnitId = null;
+    updateButtonVisuals();
 });
 
 btnMove.addEventListener('click', (e) => { 
     e.stopPropagation(); 
     if (hasDoneActionThisTurn) return; 
     currentMode = 'move'; 
-    btnMove.classList.add('active'); 
-    btnFire.classList.remove('active'); 
+    updateButtonVisuals();
 });
 
 window.addEventListener('click', (event) => {
@@ -522,8 +593,6 @@ function updateTurnUI() {
         turnIndicator.style.color = "#2ed573";
         if (!hasDoneActionThisTurn) { 
             currentMode = 'fire'; 
-            btnFire.classList.add('active'); 
-            btnMove.classList.remove('active'); 
         }
     } else {
         turnIndicator.innerText = "OPPONENT'S TURN..."; 
