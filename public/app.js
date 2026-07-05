@@ -15,11 +15,11 @@ const gltfLoader = new THREE.GLTFLoader();
 let sauModelTemplate = null; 
 let sauCenterOffset = new THREE.Vector3(); 
 
-// Константы размеров игры
+// Константы размеров игры (Радиусы уменьшены по запросу)
 const FIELD_SIZE = 25;       
-const DIRECT_RADIUS = 2.25;  // Первый критический радиус (черный кружок)
-const SPLASH_RADIUS = 6;     // Второй радиус осколков (серый кружок)
-const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра (уменьшено для мобильных экранов)
+const DIRECT_RADIUS = 1.91;  // Уменьшен на 15% (Первый критический радиус / черный кружок)
+const SPLASH_RADIUS = 5.4;   // Уменьшен на 10% (Второй радиус осколков / серый кружок)
+const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра
 
 // --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container');
@@ -31,7 +31,7 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
     scene.background = bgTexture;
 });
 
-// Базовый FOV для ПК (горизонтальных экранов)
+// Базовый FOV для ПК
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -40,16 +40,13 @@ function updateCameraPosition() {
     const height = window.innerHeight;
     const aspect = width / height;
 
-    // Динамический расчет FOV для смартфонов (портретный режим)
-    // Если экран узкий и высокий, увеличиваем FOV, чтобы отдалить сцену и уместить нижнее поле с запасом
     if (aspect < 1) {
-        camera.fov = BASE_FOV / aspect * 0.85; // Настраиваемый коэффициент отступа
+        camera.fov = BASE_FOV / aspect * 0.85; 
     } else {
         camera.fov = BASE_FOV;
     }
     camera.updateProjectionMatrix();
 
-    // Фиксированное положение камеры и точка взгляда
     camera.position.set(0, 42, 38); 
     camera.lookAt(0, -2, -5); 
 }
@@ -182,29 +179,26 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
         hpContainer = document.createElement('div');
         hpContainer.id = `hp-container-${id}`;
         hpContainer.className = 'hp-bar-container';
-        
-        // Внутренний HTML с базовой структурой полоски и текста
         hpContainer.innerHTML = `<div class="hp-bar-fill"></div><span class="hp-bar-text"></span>`;
         document.body.appendChild(hpContainer);
     }
 
-    // ЖЕСТКОЕ ЗАДАНИЕ СТИЛЕЙ ИЗ JAVASCRIPT, ЧТОБЫ ИЗБЕЖАТЬ СБОЕВ CSS
     hpContainer.style.position = 'absolute';
     hpContainer.style.top = '0';
     hpContainer.style.left = '0';
-    hpContainer.style.width = '40px';         // Базовая ширина (увеличится через scale)
-    hpContainer.style.height = '6px';          // Базовая высота
+    hpContainer.style.width = '40px';         
+    hpContainer.style.height = '6px';          
     hpContainer.style.background = 'rgba(0, 0, 0, 0.6)';
     hpContainer.style.border = '1px solid #ffffff';
     hpContainer.style.pointerEvents = 'none';
-    hpContainer.style.zIndex = '9999';          // Поверх трехмерного холста канваса
+    hpContainer.style.zIndex = '9999';          
 
     const fill = hpContainer.querySelector('.hp-bar-fill');
     const text = hpContainer.querySelector('.hp-bar-text');
 
     if (fill) {
         fill.style.height = '100%';
-        fill.style.background = '#2ed573';      // Яркий зеленый цвет полоски HP
+        fill.style.background = '#2ed573';      
         fill.style.transition = 'width 0.2s ease';
     }
 
@@ -240,20 +234,20 @@ function updateHpBarsPositions() {
         
         if (domEl && domEl.style.display !== 'none') {
             group.getWorldPosition(tempV);
-            tempV.y += 3.2; // Приподняли повыше над танком, чтобы увеличенный размер не перекрывал саму модельку
+            tempV.y += 3.2; 
             tempV.project(camera);
             
             const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
             
-            // scale(2.0) — увеличивает полоску со шрифтом ровно в 2 раза прямо на экране
             domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px) scale(2.0)`;
         }
     });
 }
 
 function createSplash(serverX, serverY, targetRole, type) {
-    const color = (type === 'hit' || type === 'splash') ? 0xffa500 : 0x5c4033; 
+    // Желтые/оранжевые эффекты полностью убраны. Всегда летит темно-коричневая земля.
+    const color = 0x5c4033; 
     const particleCount = 25;
 
     const offsetZ = (targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
