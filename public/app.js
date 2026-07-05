@@ -343,17 +343,25 @@ function applyMobileLayout() {
     turnIndicator.style.margin = '0 0 12px 0';
     turnIndicator.style.pointerEvents = 'auto';
 
-    // Позиционируем кнопки ПРЯМО под надписью (для мобильных убираем абсолютный bottom)
+    // Позиционируем кнопки ПРЯМО под надписью
     if (isMobile) {
         controls.style.position = 'static';
         controls.style.transform = 'none';
+        controls.style.margin = '5px 0 0 0';
     } else {
         controls.style.position = 'absolute';
         controls.style.bottom = '30px';
     }
     
+    // Проверяем, чей ход, защищаясь от null-значений на старте
     const isMyTurn = gameState && gameState.turn === myId;
-    controls.style.display = hasDoneActionThisTurn || !isMyTurn ? 'none' : 'flex';
+    
+    if (hasDoneActionThisTurn || !isMyTurn) {
+        controls.style.setProperty('display', 'none', 'important');
+    } else {
+        controls.style.setProperty('display', 'flex', 'important');
+    }
+    
     controls.style.flexDirection = 'row';
     controls.style.gap = '10px';
     controls.style.pointerEvents = 'auto';
@@ -429,7 +437,7 @@ window.addEventListener('click', (event) => {
 
         if (currentMode === 'fire') {
             hasDoneActionThisTurn = true; 
-            controls.style.display = 'none';
+            controls.style.setProperty('display', 'none', 'important');
             socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY, forcedRole: myRole });
         } 
         else if (currentMode === 'move') {
@@ -437,7 +445,7 @@ window.addEventListener('click', (event) => {
                 const unitIndex = parseInt(selectedUnitId.split('_')[1]);
                 
                 hasDoneActionThisTurn = true; 
-                controls.style.display = 'none';
+                controls.style.setProperty('display', 'none', 'important');
                 updateSelectionRing(null); 
                 
                 socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: unitIndex, forcedRole: myRole });
@@ -514,7 +522,6 @@ function updateTurnUI() {
         turnIndicator.style.color = "#ff4757"; 
     }
     
-    // Обновляем структуру интерфейса под размеры текущего экрана
     applyMobileLayout();
 }
 
@@ -574,7 +581,7 @@ window.addEventListener('resize', () => {
     updateCameraPosition();
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-    applyMobileLayout(); // Перерасчет при изменении ориентации экрана смартфона
+    applyMobileLayout(); 
 });
 
 // Первичная инициализация верстки при загрузке страницы
