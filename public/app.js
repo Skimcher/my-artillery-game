@@ -15,10 +15,10 @@ const gltfLoader = new THREE.GLTFLoader();
 let sauModelTemplate = null; 
 let sauCenterOffset = new THREE.Vector3(); 
 
-// Константы размеров игры (Радиусы уменьшены еще на 10%)
+// Константы размеров игры (Радиусы уменьшены по запросу)
 const FIELD_SIZE = 25;       
-const DIRECT_RADIUS = 1.72;  // Уменьшен еще на 10% (Первый критический радиус / черный кружок)
-const SPLASH_RADIUS = 4.86;  // Уменьшен еще на 10% (Второй радиус осколков / серый кружок)
+const DIRECT_RADIUS = 1.29;  // Уменьшен на 25% (Первый критический радиус / черный кружок)
+const SPLASH_RADIUS = 4.13;  // Уменьшен на 15% (Второй радиус осколков / серый кружок)
 const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра
 
 // --- THREE.JS SETUP ---
