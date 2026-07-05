@@ -279,11 +279,11 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     group.userData = { domId: `hp-container-${id}` };
 }
 
-// Изменяем масштаб полосок HP динамически (в 2 раза меньше на мобильных)
+// Изменяем масштаб полосок HP динамически (в 2.5 раза меньше на мобильных — scale 0.8 вместо 2.0)
 function updateHpBarsPositions() {
     const tempV = new THREE.Vector3();
     const isMobile = window.innerWidth <= 768;
-    const hpScale = isMobile ? 'scale(1.0)' : 'scale(2.0)';
+    const hpScale = isMobile ? 'scale(0.8)' : 'scale(2.0)';
     
     Object.keys(visualUnits).forEach(id => {
         const group = visualUnits[id];
