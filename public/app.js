@@ -8,7 +8,7 @@ let currentMode = 'fire';
 let hasDoneActionThisTurn = false; 
 
 let selectedUnitId = null;  // ID выбранной САУ для перемещения (например, 'p1_0')
-let selectionRing = null;   // Объект визуального кольца подсветки выбора
+let selectionRing = null;   // Объект визуального круга подсветки выбора
 
 const visualUnits = {};     
 const particles = []; 
@@ -168,7 +168,7 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     if (gameState) renderUnits();
 });
 
-// --- ПОДСВЕТКА ВЫБРАННОЙ САУ ---
+// --- ПОДСВЕТКА ВЫБРАННОЙ САУ (Залитый белый круг радиусом 3 метра) ---
 function updateSelectionRing(unitGroup) {
     if (selectionRing) {
         if (selectionRing.parent) selectionRing.parent.remove(selectionRing);
@@ -176,17 +176,42 @@ function updateSelectionRing(unitGroup) {
     }
     if (!unitGroup) return;
 
-    const ringGeo = new THREE.RingGeometry(2.85, 3.0, 32); 
+    // Используем PlaneGeometry радиусом 3 метра (размер 6x6) с круглой текстурой, либо RingGeometry с внутренним радиусом 0
+    const ringGeo = new THREE.RingGeometry(0, 3.0, 32); 
     ringGeo.rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.5, 
+        opacity: 0.3, 
         side: THREE.DoubleSide 
     });
     selectionRing = new THREE.Mesh(ringGeo, ringMat);
     selectionRing.position.y = 0.05; 
     unitGroup.add(selectionRing);
+}
+
+// Функция для выбора случайной живой САУ текущего игрока
+function selectRandomAliveUnit() {
+    if (!gameState || !myRole || !gameState.players[myRole]) return;
+    
+    const units = gameState.players[myRole].units;
+    const aliveUnitIndices = [];
+    
+    units.forEach((unit, index) => {
+        if (unit && !unit.destroyed && unit.x !== -1000) {
+            aliveUnitIndices.push(index);
+        }
+    });
+    
+    if (aliveUnitIndices.length > 0) {
+        const randomIndex = aliveUnitIndices[Math.floor(Math.random() * aliveUnitIndices.length)];
+        const targetId = `${myRole}_${randomIndex}`;
+        
+        if (visualUnits[targetId]) {
+            selectedUnitId = targetId;
+            updateSelectionRing(visualUnits[targetId]);
+        }
+    }
 }
 
 // --- ОТРИСОВКА ЮНИТОВ И HP-БАРА ---
@@ -347,23 +372,19 @@ if (!uiContainer) {
     document.body.appendChild(uiContainer);
 }
 
-// Очистим старое, если оно было в HTML, чтобы избежать дублей
 uiContainer.innerHTML = '';
 
-// 1. Надпись ходов (YOUR TURN / OPPONENT'S TURN)
 const turnIndicator = document.createElement('div');
 turnIndicator.id = 'turn-indicator';
 turnIndicator.innerText = "Connecting...";
 uiContainer.appendChild(turnIndicator);
 
-// 2. Блок таймера со словом TIME
 const timerBlock = document.createElement('div');
 timerBlock.id = 'timer-block';
 timerBlock.innerHTML = `TIME: <span id="timer-val">0</span>`;
 uiContainer.appendChild(timerBlock);
 const timerDisplay = document.getElementById('timer-val');
 
-// 3. Блок с кнопками FIRE и MOVE
 const controls = document.createElement('div');
 controls.id = 'controls';
 uiContainer.appendChild(controls);
@@ -378,9 +399,7 @@ btnMove.id = 'btn-move';
 btnMove.innerText = 'MOVE';
 controls.appendChild(btnMove);
 
-// Стилизация интерфейса (Сборка по центру экрана сверху вниз)
 const styleUI = () => {
-    // Главный родительский контейнер строго по центру
     uiContainer.style.position = 'absolute';
     uiContainer.style.top = '15px';
     uiContainer.style.left = '50%';
@@ -393,14 +412,12 @@ const styleUI = () => {
     uiContainer.style.zIndex = '99999';
     uiContainer.style.textAlign = 'center';
 
-    // Стили индикатора хода (Центровка + Тень)
     turnIndicator.style.fontFamily = 'sans-serif';
     turnIndicator.style.fontWeight = 'bold';
     turnIndicator.style.textShadow = '2px 2px 4px #000000';
     turnIndicator.style.pointerEvents = 'auto';
     turnIndicator.style.margin = '0';
 
-    // Стили таймера TIME по центру под ходом
     timerBlock.style.fontFamily = 'sans-serif';
     timerBlock.style.fontWeight = 'bold';
     timerBlock.style.color = '#ffffff';
@@ -408,13 +425,11 @@ const styleUI = () => {
     timerBlock.style.margin = '5px 0 10px 0';
     timerBlock.style.pointerEvents = 'auto';
 
-    // Стили контейнера кнопок под таймером
     controls.style.position = 'static';
     controls.style.transform = 'none';
     controls.style.gap = '15px';
     controls.style.pointerEvents = 'auto';
 
-    // Базовые стили для кнопок FIRE и MOVE
     [btnFire, btnMove].forEach(btn => {
         btn.style.fontWeight = 'bold';
         btn.style.cursor = 'pointer';
@@ -444,18 +459,15 @@ function updateButtonVisuals() {
 function applyMobileLayout() {
     const isMobile = window.innerWidth <= 768;
     
-    // Пересчитываем размеры текста (на мобильных — ровно в 2 раза меньше)
     turnIndicator.style.fontSize = isMobile ? '16px' : '32px';
     timerBlock.style.fontSize = isMobile ? '13px' : '26px';
 
-    // Адаптируем кнопки под мобильный
     controls.style.flexDirection = 'row';
     [btnFire, btnMove].forEach(btn => {
         btn.style.padding = isMobile ? '8px 18px' : '12px 24px';
         btn.style.fontSize = isMobile ? '14px' : '16px';
     });
 
-    // Управление видимостью кнопок
     const isMyTurn = gameState && gameState.turn === myId;
     if (!gameState || hasDoneActionThisTurn || !isMyTurn) {
         controls.style.setProperty('display', 'none', 'important');
@@ -480,6 +492,9 @@ btnMove.addEventListener('click', (e) => {
     if (hasDoneActionThisTurn) return; 
     currentMode = 'move'; 
     updateButtonVisuals();
+    
+    // При клике на MOVE выбираем случайный танк
+    selectRandomAliveUnit();
 });
 
 window.addEventListener('click', (event) => {
