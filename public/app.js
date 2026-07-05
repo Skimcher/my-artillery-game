@@ -313,12 +313,51 @@ function spawnFireAndSmoke() {
     });
 }
 
-// --- UI CONTROLS ---
+// --- UI CONTROLS & MOBILE LAYOUT LOGIC ---
 const btnFire = document.getElementById('btn-fire');
 const btnMove = document.getElementById('btn-move');
 const turnIndicator = document.getElementById('turn-indicator');
 const timerDisplay = document.getElementById('timer');
 const controls = document.getElementById('controls');
+
+function applyMobileLayout() {
+    if (!turnIndicator || !controls) return;
+    
+    const isMobile = window.innerWidth <= 768;
+    const uiContainer = turnIndicator.parentElement;
+    
+    if (uiContainer) {
+        uiContainer.style.position = 'absolute';
+        uiContainer.style.top = isMobile ? '10px' : '20px';
+        uiContainer.style.left = '50%';
+        uiContainer.style.transform = 'translateX(-50%)';
+        uiContainer.style.display = 'flex';
+        uiContainer.style.flexDirection = 'column';
+        uiContainer.style.alignItems = 'center';
+        uiContainer.style.width = '100%';
+        uiContainer.style.pointerEvents = 'none';
+    }
+
+    // Изменение размера текста ровно в 2 раза на мобильных (32px на ПК -> 16px на мобильных)
+    turnIndicator.style.fontSize = isMobile ? '16px' : '32px';
+    turnIndicator.style.margin = '0 0 12px 0';
+    turnIndicator.style.pointerEvents = 'auto';
+
+    // Позиционируем кнопки ПРЯМО под надписью (для мобильных убираем абсолютный bottom)
+    if (isMobile) {
+        controls.style.position = 'static';
+        controls.style.transform = 'none';
+    } else {
+        controls.style.position = 'absolute';
+        controls.style.bottom = '30px';
+    }
+    
+    const isMyTurn = gameState && gameState.turn === myId;
+    controls.style.display = hasDoneActionThisTurn || !isMyTurn ? 'none' : 'flex';
+    controls.style.flexDirection = 'row';
+    controls.style.gap = '10px';
+    controls.style.pointerEvents = 'auto';
+}
 
 btnFire.addEventListener('click', (e) => { 
     e.stopPropagation(); 
@@ -389,7 +428,8 @@ window.addEventListener('click', (event) => {
         const serverY = planeZ + (FIELD_SIZE / 2) - offsetZ;
 
         if (currentMode === 'fire') {
-            hasDoneActionThisTurn = true; controls.classList.add('hidden');
+            hasDoneActionThisTurn = true; 
+            controls.style.display = 'none';
             socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY, forcedRole: myRole });
         } 
         else if (currentMode === 'move') {
@@ -397,7 +437,7 @@ window.addEventListener('click', (event) => {
                 const unitIndex = parseInt(selectedUnitId.split('_')[1]);
                 
                 hasDoneActionThisTurn = true; 
-                controls.classList.add('hidden');
+                controls.style.display = 'none';
                 updateSelectionRing(null); 
                 
                 socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: unitIndex, forcedRole: myRole });
@@ -409,7 +449,7 @@ window.addEventListener('click', (event) => {
 
 // --- NETWORK ---
 socket.emit('joinGame');
-socket.on('waiting', () => { turnIndicator.innerText = "Waiting for opponent..."; });
+socket.on('waiting', () => { turnIndicator.innerText = "Waiting for opponent..."; applyMobileLayout(); });
 socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
 socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
 socket.on('turnChanged', (data) => { 
@@ -462,11 +502,20 @@ socket.on('gameOver', (data) => {
 
 function updateTurnUI() {
     if (gameState.turn === myId) {
-        turnIndicator.innerText = "YOUR TURN!"; turnIndicator.style.color = "#2ed573";
-        if (!hasDoneActionThisTurn) { controls.classList.remove('hidden'); currentMode = 'fire'; btnFire.classList.add('active'); btnMove.classList.remove('active'); }
+        turnIndicator.innerText = "YOUR TURN!"; 
+        turnIndicator.style.color = "#2ed573";
+        if (!hasDoneActionThisTurn) { 
+            currentMode = 'fire'; 
+            btnFire.classList.add('active'); 
+            btnMove.classList.remove('active'); 
+        }
     } else {
-        turnIndicator.innerText = "OPPONENT'S TURN..."; turnIndicator.style.color = "#ff4757"; controls.classList.add('hidden'); 
+        turnIndicator.innerText = "OPPONENT'S TURN..."; 
+        turnIndicator.style.color = "#ff4757"; 
     }
+    
+    // Обновляем структуру интерфейса под размеры текущего экрана
+    applyMobileLayout();
 }
 
 function renderUnits() {
@@ -525,4 +574,8 @@ window.addEventListener('resize', () => {
     updateCameraPosition();
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    applyMobileLayout(); // Перерасчет при изменении ориентации экрана смартфона
 });
+
+// Первичная инициализация верстки при загрузке страницы
+setTimeout(applyMobileLayout, 100);
