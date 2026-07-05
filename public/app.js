@@ -154,7 +154,6 @@ function updateSelectionRing(unitGroup) {
     }
     if (!unitGroup) return;
 
-    // Внешний радиус 3.0 метра, внутренний 2.85 для тонкого кольца
     const ringGeo = new THREE.RingGeometry(2.85, 3.0, 32); 
     ringGeo.rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({ 
@@ -164,7 +163,7 @@ function updateSelectionRing(unitGroup) {
         side: THREE.DoubleSide 
     });
     selectionRing = new THREE.Mesh(ringGeo, ringMat);
-    selectionRing.position.y = 0.05; // Слегка приподнимаем над землей
+    selectionRing.position.y = 0.05; 
     unitGroup.add(selectionRing);
 }
 
@@ -195,10 +194,8 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
         model.traverse((child) => {
             if (child.isMesh) {
                 if (!isDestroyed) {
-                    // Используем ОРИГИНАЛЬНЫЕ текстуры и материалы вашей модели
                     child.material.needsUpdate = true;
                 } else {
-                    // Для уничтоженной техники клонируем родной материал и делаем его темным/прозрачным
                     child.material = child.material.clone();
                     if (child.material.color) child.material.color.setHex(0x222222);
                     child.material.transparent = true;
@@ -329,7 +326,6 @@ btnFire.addEventListener('click', (e) => {
     currentMode = 'fire'; 
     btnFire.classList.add('active'); 
     btnMove.classList.remove('active'); 
-    // Сбрасываем выбор при переключении на режим огня
     if (selectionRing) updateSelectionRing(null);
     selectedUnitId = null;
 });
@@ -353,12 +349,10 @@ window.addEventListener('click', (event) => {
 
     raycaster.setFromCamera(pointer, camera);
 
-    // --- ЛОГИКА ДЛЯ РЕЖИМА ХОДА (ВЫБОР САУ И КЛИК) ---
     if (currentMode === 'move') {
         const unitIntersects = raycaster.intersectObjects(Object.values(visualUnits), true);
         
         if (unitIntersects.length > 0) {
-            // Ищем верхний Group-объект, зарегистрированный в visualUnits
             let clickedMesh = unitIntersects[0].object;
             let currentObj = clickedMesh;
             let foundId = null;
@@ -369,21 +363,19 @@ window.addEventListener('click', (event) => {
                 currentObj = currentObj.parent;
             }
 
-            // Если кликнули по своей живой САУ
             if (foundId && foundId.startsWith(myRole)) {
                 const unitIndex = parseInt(foundId.split('_')[1]);
                 const targetUnit = gameState.players[myRole].units[unitIndex];
 
                 if (targetUnit && !targetUnit.destroyed) {
                     selectedUnitId = foundId;
-                    updateSelectionRing(visualUnits[foundId]); // Включаем подсветку 3м
-                    return; // Ждем клика по полю для перемещения
+                    updateSelectionRing(visualUnits[foundId]); 
+                    return; 
                 }
             }
         }
     }
 
-    // --- КЛИК ПО ПОЛЮ И СОВЕРШЕНИЕ ДЕЙСТВИЯ ---
     const intersects = raycaster.intersectObjects(fieldClickPlanes);
 
     if (intersects.length > 0) {
@@ -401,14 +393,11 @@ window.addEventListener('click', (event) => {
             socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY, forcedRole: myRole });
         } 
         else if (currentMode === 'move') {
-            // Выполняем перемещение только если САУ уже выбрана
             if (selectedUnitId && clickedPlaneRole === myRole) {
                 const unitIndex = parseInt(selectedUnitId.split('_')[1]);
                 
                 hasDoneActionThisTurn = true; 
                 controls.classList.add('hidden');
-                
-                // Убираем подсветку перед ходом
                 updateSelectionRing(null); 
                 
                 socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: unitIndex, forcedRole: myRole });
@@ -481,7 +470,6 @@ function updateTurnUI() {
 }
 
 function renderUnits() {
-    // Сохраняем состояние подсветки перед перерисовкой
     const activeIdBeforeRender = selectedUnitId;
 
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
@@ -512,7 +500,6 @@ function renderUnits() {
         });
     }
 
-    // Восстанавливаем подсветку, если юнит все еще существует
     if (activeIdBeforeRender && visualUnits[activeIdBeforeRender]) {
         selectedUnitId = activeIdBeforeRender;
         updateSelectionRing(visualUnits[selectedUnitId]);
