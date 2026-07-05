@@ -279,8 +279,12 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     group.userData = { domId: `hp-container-${id}` };
 }
 
+// Изменяем масштаб полосок HP динамически (в 2 раза меньше на мобильных)
 function updateHpBarsPositions() {
     const tempV = new THREE.Vector3();
+    const isMobile = window.innerWidth <= 768;
+    const hpScale = isMobile ? 'scale(1.0)' : 'scale(2.0)';
+    
     Object.keys(visualUnits).forEach(id => {
         const group = visualUnits[id];
         const domId = group.userData.domId;
@@ -294,7 +298,7 @@ function updateHpBarsPositions() {
             const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
             
-            domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px) scale(2.0)`;
+            domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px) ${hpScale}`;
         }
     });
 }
@@ -352,7 +356,7 @@ turnIndicator.id = 'turn-indicator';
 turnIndicator.innerText = "Connecting...";
 uiContainer.appendChild(turnIndicator);
 
-// 2. Блок таймера со словом TIME вместо Время
+// 2. Блок таймера со словом TIME
 const timerBlock = document.createElement('div');
 timerBlock.id = 'timer-block';
 timerBlock.innerHTML = `TIME: <span id="timer-val">0</span>`;
