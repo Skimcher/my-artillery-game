@@ -11,11 +11,11 @@ expressApp.use(express.static('public'));
 let rooms = {}; 
 let waitingPlayer = null; 
 
-// --- ИГРОВЫЕ ПАРАМЕТРЫ (ИСПРАВЛЕНО: СТРОГОЕ СООТВЕТСТВИЕ КЛИЕНТУ) ---
+// --- ИГРОВЫЕ ПАРАМЕТРЫ (СИНХРОНИЗИРОВАНО С КЛИЕНТОМ) ---
 const FIELD_SIZE = 25;       // Размер поля в метрах
 const UNIT_RADIUS = 1.725;   // 3.45м / 2 (размер 3D-модели +15%)
-const DIRECT_RADIUS = 0.97;  // Итоговый критический радиус (Клиент и Сервер равны!)
-const SPLASH_RADIUS = 4.13;  // Итоговый радиус осколков (-51 HP)
+const DIRECT_RADIUS = 0.97;  // Радиус критического попадания (100 HP / уничтожение)
+const SPLASH_RADIUS = 4.13;  // Радиус осколков (строго -51 HP)
 
 // Генерация случайных позиций САУ на поле боя
 function generateRandomUnits() {
@@ -98,13 +98,16 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- ОБРАБОТКА ДЕЙСТВИЙ ИГРОКА (СТРОГИЙ РАСЧЕТ УРОНА) ---
+    // --- ОБРАБОТКА ДЕЙСТВИЙ ИГРОКА (ОБНОВЛЕННАЯ СИНХРОННАЯ ЛОГИКА) ---
     socket.on('playerAction', (action) => {
-        const roomId = Object.keys(rooms).find(r => rooms[r].players.p1.id === socket.id || rooms[r].players.p2.id === socket.id);
+        const roomId = Object.keys(rooms).find(r => 
+            rooms[r].players.p1.id === socket.id || 
+            rooms[r].players.p2.id === socket.id
+        );
         if (!roomId) return;
 
         const room = rooms[roomId];
-        if (room.turn !== socket.id) return; // Ход не этого игрока
+        if (room.turn !== socket.id) return; 
 
         const activeRole = room.players.p1.id === socket.id ? 'p1' : 'p2';
         const opponentRole = activeRole === 'p1' ? 'p2' : 'p1';
@@ -116,17 +119,14 @@ io.on('connection', (socket) => {
             targetUnits.forEach((unit) => {
                 if (unit.destroyed) return;
 
-                // Считаем дистанцию от точки клика до центра САУ врага
                 const distance = Math.hypot(unit.x - action.x, unit.y - action.y);
 
-                // ИСПРАВЛЕНО: Строгое и изолированное распределение урона через if / else if
                 if (distance <= DIRECT_RADIUS) {
-                    unit.hp = 0; // Прямое попадание — уничтожен (или unit.hp -= 100)
+                    unit.hp = 0; 
                     unit.destroyed = true;
                     hitResult = 'direct';
                 } 
                 else if (distance <= SPLASH_RADIUS) {
-                    // Сюда попадет ТОЛЬКО если дистанция больше DIRECT, но меньше SPLASH
                     unit.hp -= 51; 
                     hitResult = 'splash';
                     
@@ -137,7 +137,6 @@ io.on('connection', (socket) => {
                 }
             });
 
-            // Отправляем визуализацию взрыва всем в комнате
             io.to(roomId).emit('fireResult', { x: action.x, y: action.y, targetRole: opponentRole, result: hitResult });
             
             checkWinCondition(roomId);
@@ -145,13 +144,23 @@ io.on('connection', (socket) => {
         } 
         else if (action.type === 'move') {
             const unit = room.players[activeRole].units[action.unitIndex];
+            
             if (unit && !unit.destroyed) {
-                // Ограничиваем координаты границами поля с учетом радиуса САУ
                 const min = UNIT_RADIUS;
                 const max = FIELD_SIZE - UNIT_RADIUS;
+                
                 unit.x = Math.max(min, Math.min(max, action.x));
                 unit.y = Math.max(min, Math.min(max, action.y));
+                
+                console.log(`Игрок ${activeRole} передвинул САУ №${action.unitIndex} в: X=${unit.x}, Y=${unit.y}`);
+                
+                // Мгновенно обновляем состояние на клиентах, чтобы танк изменил позицию визуально
+                const p1Socket = io.sockets.sockets.get(room.players.p1.id);
+                const p2Socket = io.sockets.sockets.get(room.players.p2.id);
+                if (p1Socket) p1Socket.emit('gameStateUpdate', getMaskedState(room, 'p1'));
+                if (p2Socket) p2Socket.emit('gameStateUpdate', getMaskedState(room, 'p2'));
             }
+            
             switchTurn(roomId);
         }
     });
@@ -197,7 +206,6 @@ function switchTurn(roomId) {
 
     room.turn = room.turn === room.players.p1.id ? room.players.p2.id : room.players.p1.id;
     
-    // Рассылаем обновленное скрытое состояние для каждого игрока индивидуально (туман войны)
     const p1Socket = io.sockets.sockets.get(room.players.p1.id);
     const p2Socket = io.sockets.sockets.get(room.players.p2.id);
 
@@ -223,7 +231,6 @@ function checkWinCondition(roomId) {
         io.to(roomId).emit('gameOver', { winner: winner });
         delete rooms[roomId];
     } else {
-        // Если игра продолжается, отправляем актуальные данные здоровья
         const p1Socket = io.sockets.sockets.get(room.players.p1.id);
         const p2Socket = io.sockets.sockets.get(room.players.p2.id);
         if (p1Socket) p1Socket.emit('gameStateUpdate', getMaskedState(room, 'p1'));
@@ -239,7 +246,7 @@ function getMaskedState(room, viewerRole) {
         if (unit.destroyed) {
             return { x: unit.x, y: unit.y, hp: 0, destroyed: true };
         } else {
-            return { x: -1000, y: -1000, hp: unit.hp, destroyed: false }; // Прячем живые танки
+            return { x: -1000, y: -1000, hp: unit.hp, destroyed: false }; 
         }
     });
 
