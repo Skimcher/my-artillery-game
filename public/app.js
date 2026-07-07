@@ -191,9 +191,11 @@ function updateSelectionRing(unitGroup) {
 
 // Функция для выбора случайной живой САУ текущего игрока
 function selectRandomAliveUnit() {
-    if (!gameState || !myRole || !gameState.players[myRole]) return;
+    if (!gameState || !myRole || !gameState.players || !gameState.players[myRole]) return;
     
     const units = gameState.players[myRole].units;
+    if (!units) return;
+
     const aliveUnitIndices = [];
     
     units.forEach((unit, index) => {
@@ -491,7 +493,7 @@ btnMove.addEventListener('click', (e) => {
     currentMode = 'move'; 
     updateButtonVisuals();
     
-    // Подсвечиваем случайный танк на старте режима MOVE
+    // Подсвечиваем случайную САУ
     selectRandomAliveUnit();
 });
 
@@ -528,7 +530,7 @@ window.addEventListener('click', (event) => {
             if (targetUnit && !targetUnit.destroyed) {
                 selectedUnitId = foundId;
                 updateSelectionRing(visualUnits[foundId]); 
-                return; // Выходим, чтобы клик не засчитался как команда хода в эту же точку
+                return; // Выходим, чтобы клик не засчитался как перемещение под себя
             }
         }
     }
@@ -582,7 +584,7 @@ socket.on('gameStart', (data) => {
 });
 socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
 socket.on('turnChanged', (data) => { 
-    if (!gameState) return; 
+    gameState = data.state || gameState; // Обновляем состояние игры новыми маскированными данными с сервера
     gameState.turn = data.turn; 
     timerDisplay.innerText = data.timer; 
     hasDoneActionThisTurn = false; 
@@ -652,6 +654,8 @@ function renderUnits() {
     Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
     burningUnitsPositions.length = 0; 
     
+    if (!gameState || !gameState.players) return;
+
     const p1 = gameState.players.p1; const p2 = gameState.players.p2;
 
     if (p1 && p1.units) {
