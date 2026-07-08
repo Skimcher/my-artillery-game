@@ -40,7 +40,8 @@ const container = document.getElementById('canvas-container') || document.body;
 const scene = new THREE.Scene();
 
 const textureLoader = new THREE.TextureLoader();
-textureLoader.load('/assets/background.jpg', (bgTexture) => {
+// ИСПРАВЛЕНО: Абсолютный путь для заднего фона
+textureLoader.load('https://artillery-game2.onrender.com/assets/background.jpg', (bgTexture) => {
     scene.background = bgTexture;
 });
 
@@ -79,7 +80,8 @@ let fieldClickPlanes = [];
 let visualField1, visualField2;
 let outline1, outline2;
 
-const battlefieldTexture = textureLoader.load('/assets/battlefield.jpg');
+// ИСПРАВЛЕНО: Абсолютный путь для текстуры земли
+const battlefieldTexture = textureLoader.load('https://artillery-game2.onrender.com/assets/battlefield.jpg');
 
 function createBattlefields() {
     const fieldGeometry = new THREE.BoxGeometry(FIELD_SIZE, 0.1, FIELD_SIZE);
