@@ -1,28 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Artillery Game 2.5D</title>
-    
     <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="status-text"></div>
+
+    <div id="controls-panel">
+        <button id="btn-fire" class="btn-action">Fire</button>
+        <button id="btn-move" class="btn-action">Move</button>
+        <div id="timer-text">--s</div>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="/socket.io/socket.io.js"></script>
-</head>
-<body>
-    <div id="canvas-container"></div>
-
-    <div class="ui-container">
-        <div id="status-text" class="status-info">Connecting...</div>
-        <div id="timer-text" class="timer-info">TIME: 9</div>
-        <div id="controls-panel" class="controls-container">
-            <button id="btn-fire" class="btn-action btn-fire-active">FIRE</button>
-            <button id="btn-move" class="btn-action btn-inactive">MOVE</button>
-        </div>
-    </div>
-
     <script src="app.js"></script>
 </body>
 </html>
