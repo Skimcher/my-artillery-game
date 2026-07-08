@@ -31,21 +31,14 @@ function adjustCamera() {
 
     if (aspect < 1) {
         // СМАРТФОНЫ И ВЕРТИКАЛЬНЫЕ ЭКРАНЫ
-        // Вычисляем коэффициент сужения экрана
         const multiplier = 1 / aspect; 
-        
-        // Динамически подбираем высоту и удаление, чтобы поля идеально вписались
         const dynamicY = 38.0 * multiplier;
         const dynamicZ = 33.0 * multiplier;
         
-        // Ставим жесткие рамки-ограничители, чтобы камера не улетала в космос
         camera.position.set(0, Math.min(dynamicY, 56), Math.min(dynamicZ, 50));
-        
-        // Центрируем взгляд камеры с легким наклоном для полного обзора нижней кромки
         camera.lookAt(0, -4.5, 2.0);
     } else {
         // ПК И ПЛАНШЕТЫ (Широкий экран)
-        // Идеальные стандартные настройки десктопа
         camera.position.set(0, 51.0, 44.5);
         camera.lookAt(0, -2, 3.2);
     }
@@ -53,7 +46,6 @@ function adjustCamera() {
     camera.updateProjectionMatrix();
 }
 
-// Запускаем расчет при загрузке страницы
 adjustCamera();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -102,11 +94,14 @@ function initFields() {
 }
 initFields();
 
+// Загрузка модели с увеличенным на 25% масштабом
 gltfLoader.load('models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
     const size = new THREE.Vector3(); box.getSize(size);
-    const scale = 3.0 / Math.max(size.x, size.y, size.z); 
+    
+    // Рассчитываем базовый scale и умножаем на 1.25 (было 3.0 -> стало 3.75)
+    const scale = 3.75 / Math.max(size.x, size.y, size.z); 
     sauModelTemplate.scale.set(scale, scale, scale);
     if (gameState) renderUnits();
 });
@@ -144,7 +139,7 @@ function autoSelectUnit() {
 function drawSelectionRing(parentMesh) {
     removeSelectionRing();
     if (!parentMesh) return;
-    const ringGeo = new THREE.RingGeometry(0, 2.0, 32).rotateX(-Math.PI / 2);
+    const ringGeo = new THREE.RingGeometry(0, 2.5, 32).rotateX(-Math.PI / 2); // Немного увеличили кольцо под новую модель
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
     selectionRing = new THREE.Mesh(ringGeo, ringMat);
     selectionRing.position.y = 0.06;
@@ -261,7 +256,7 @@ function updateHpBarPositions() {
         const dom = g.userData.hpDom;
         if (dom && dom.style.display !== 'none') {
             g.getWorldPosition(tempV);
-            tempV.y += 2.8; 
+            tempV.y += 3.2; // Чуть приподняли полоску HP, так как танк стал выше
             tempV.project(camera);
             const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
