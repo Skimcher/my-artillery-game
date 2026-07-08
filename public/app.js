@@ -5,7 +5,7 @@ let currentMode = 'fire', hasDoneActionThisTurn = false, selectedUnitId = null;
 
 const visualUnits = {};
 let selectionRing = null;
-const activeParticles = []; // Массив для анимации частиц земли и огня
+const activeParticles = []; 
 
 const gltfLoader = new THREE.GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
@@ -122,47 +122,42 @@ function removeSelectionRing() {
     selectionRing = null;
 }
 
-// Функция генерации брызг земли (коричневые кубики)
 function createDirtSplash(x, z) {
-    const pCount = 40; // Количество кусочков земли
+    const pCount = 40; 
     const geom = new THREE.BoxGeometry(0.15, 0.15, 0.15);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x5c4033 }); // Коричневый цвет почвы
+    const mat = new THREE.MeshBasicMaterial({ color: 0x5c4033 }); 
 
     for (let i = 0; i < pCount; i++) {
         const mesh = new THREE.Mesh(geom, mat);
-        // Спавним строго внутри критического радиуса черного круга
         const angle = Math.random() * Math.PI * 2;
         const radius = Math.random() * DIRECT_RADIUS;
         mesh.position.set(x + Math.cos(angle) * radius, 0.3, z + Math.sin(angle) * radius);
         
         scene.add(mesh);
 
-        // Случайный импульс вверх и в стороны
         activeParticles.push({
             mesh: mesh,
             type: 'dirt',
             velocity: new THREE.Vector3(
                 (Math.random() - 0.5) * 4,
-                Math.random() * 6 + 3, // Сила взрыва вверх
+                Math.random() * 6 + 3, 
                 (Math.random() - 0.5) * 4
             ),
             gravity: -9.8,
-            life: 2.0 // Живут 2 секунды
+            life: 2.0 
         });
     }
 }
 
-// Функция постоянного горения уничтоженной техники (оранжевые искры)
 function createFireEffect(parentGroup) {
     const pCount = 15;
     const geom = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff6a00, transparent: true }); // Оранжевый огонь
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff6a00, transparent: true }); 
 
     setInterval(() => {
-        if (!parentGroup.parent) return; // Если модель удалена, тушим
+        if (!parentGroup.parent) return; 
         
         const mesh = new THREE.Mesh(geom, mat.clone());
-        // Спавним над САУ
         mesh.position.set(
             parentGroup.position.x + (Math.random() - 0.5) * 2,
             parentGroup.position.y + 0.5,
@@ -174,10 +169,10 @@ function createFireEffect(parentGroup) {
             mesh: mesh,
             type: 'fire',
             velocity: new THREE.Vector3((Math.random() - 0.5) * 1.5, Math.random() * 3 + 1, (Math.random() - 0.5) * 1.5),
-            gravity: 1.5, // Огонь тянет вверх, а не вниз
+            gravity: 1.5, 
             life: 0.8
         });
-    }, 150); // Интервал создания языков пламени
+    }, 150); 
 }
 
 function createVisualUnit(id, mX, mY, role, hp, isDestroyed) {
@@ -193,11 +188,10 @@ function createVisualUnit(id, mX, mY, role, hp, isDestroyed) {
     visualUnits[id] = group;
 
     if (sauModelTemplate) {
-        const model = sauModelTemplate.clone();
-        model.traverse((child) => {
+        const model = sauModelTemplate.clone(); model.traverse((child) => {
             if (child.isMesh && isDestroyed) {
                 child.material = child.material.clone();
-                child.material.color.setHex(0x111111); // Делаем остов обугленным (темнее)
+                child.material.color.setHex(0x111111); 
                 child.material.transparent = true;
                 child.material.opacity = 0.7;
             }
@@ -206,7 +200,7 @@ function createVisualUnit(id, mX, mY, role, hp, isDestroyed) {
     }
 
     if (isDestroyed) {
-        createFireEffect(group); // Включаем оранжевый огонь
+        createFireEffect(group); 
     }
 
     let hpBar = document.getElementById(`hp-${id}`);
@@ -313,7 +307,17 @@ window.addEventListener('pointerdown', (e) => {
     }
 });
 
-socket.on('waiting', () => { info.innerText = 'WAITING FOR OPPONENT...'; info.style.color = '#ff9f43'; });
+// Слушатели событий лобби ожидания
+socket.on('waiting', (time) => { 
+    info.innerText = 'WAITING FOR OPPONENT...'; 
+    info.style.color = '#ff9f43'; 
+    timerEl.innerText = `LOBBY TIME: ${time}s`;
+});
+
+socket.on('lobbyTimerUpdate', (time) => {
+    timerEl.innerText = `LOBBY TIME: ${time}s`;
+});
+
 socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
 socket.on('timerUpdate', (t) => { timerEl.innerText = `TIME: ${t}`; });
 
@@ -344,7 +348,6 @@ socket.on('fireResult', (data) => {
     directMesh.position.set(wX, 0.31, wZ); 
     scene.add(directMesh);
 
-    // Активируем вылет брызг земли из черного круга!
     createDirtSplash(wX, wZ);
 
     setTimeout(() => {
@@ -373,7 +376,6 @@ function updateTurnUI() {
     }
 }
 
-// Физический апдейт частиц в игровом цикле
 const clock = new THREE.Clock();
 
 function animate() {
@@ -381,7 +383,6 @@ function animate() {
     
     const delta = clock.getDelta();
 
-    // Обсчет физики частиц (земля падает, огонь поднимается и исчезает)
     for (let i = activeParticles.length - 1; i >= 0; i--) {
         const p = activeParticles[i];
         p.life -= delta;
@@ -393,19 +394,17 @@ function animate() {
             activeParticles.splice(i, 1);
         } else {
             if (p.type === 'dirt') {
-                // Земля летит по параболе вниз
                 p.velocity.y += p.gravity * delta;
                 p.mesh.position.addScaledVector(p.velocity, delta);
                 if (p.mesh.position.y < 0.3) {
-                    p.mesh.position.y = 0.3; // Упали на землю — остановились
+                    p.mesh.position.y = 0.3; 
                     p.velocity.set(0,0,0);
                 }
             } else if (p.type === 'fire') {
-                // Огонь поднимается вверх и плавно растворяется
                 p.mesh.position.y += p.velocity.y * delta;
                 p.mesh.position.x += p.velocity.x * delta;
                 p.mesh.position.z += p.velocity.z * delta;
-                p.mesh.material.opacity = p.life / 0.8; // Затухание альфы
+                p.mesh.material.opacity = p.life / 0.8; 
             }
         }
     }
