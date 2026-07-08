@@ -11,7 +11,7 @@ expressApp.use(express.static('public'));
 let rooms = {}; 
 let waitingPlayer = null; 
 
-// --- ИГРОВЫЕ ПАРАМЕТРЫ (СИНХРОНИЗИРОВАНО С КЛИЕНТОМ) ---
+// --- ИГРОВЫЕ ПАРАМЕТРЫ ---
 const FIELD_SIZE = 25;       // Размер поля в метрах
 const UNIT_RADIUS = 1.725;   // 3.45м / 2 (размер 3D-модели +15%)
 const DIRECT_RADIUS = 0.97;  // Радиус критического попадания (100 HP / уничтожение)
@@ -98,7 +98,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- ОБРАБОТКА ДЕЙСТВИЙ ИГРОКА (ОБНОВЛЕННАЯ СИНХРОННАЯ ЛОГИКА) ---
+    // --- ОБРАБОТКА ДЕЙСТВИЙ ИГРОКА ---
     socket.on('playerAction', (action) => {
         const roomId = Object.keys(rooms).find(r => 
             rooms[r].players.p1.id === socket.id || 
@@ -238,7 +238,6 @@ function checkWinCondition(roomId) {
     }
 }
 
-// Туман войны: Игрок видит координаты врага только если вражеская САУ уничтожена
 function getMaskedState(room, viewerRole) {
     const opponentRole = viewerRole === 'p1' ? 'p2' : 'p1';
     
