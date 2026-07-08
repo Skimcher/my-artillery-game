@@ -1,4 +1,3 @@
-// НАСТРОЙКА КЛИЕНТА: Принудительный запуск чистого веб-сокета для обхода защиты фреймов Itch.io
 const socket = io('https://artillery-game2.onrender.com', {
     transports: ['websocket'],
     upgrade: false,
@@ -12,8 +11,8 @@ let gameState = null;
 let currentMode = 'fire';   
 let hasDoneActionThisTurn = false; 
 
-let selectedUnitId = null;  // ID выбранной САУ для перемещения (например, 'p1_0')
-let selectionRing = null;   // Объект визуального круга подсветки выбора
+let selectedUnitId = null;  
+let selectionRing = null;   
 
 const visualUnits = {};     
 const particles = []; 
@@ -23,13 +22,12 @@ const gltfLoader = new THREE.GLTFLoader();
 let sauModelTemplate = null; 
 let sauCenterOffset = new THREE.Vector3(); 
 
-// Константы размеров игры
 const FIELD_SIZE = 25;       
-const DIRECT_RADIUS = 0.97;  // Итоговый критический радиус
-const SPLASH_RADIUS = 4.13;  // Итоговый радиус осколков
-const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра
+const DIRECT_RADIUS = 0.97;  
+const SPLASH_RADIUS = 4.13;  
+const FIELD_OFFSET_Z = 13.5; 
 
-// --- СВЯЗЫВАНИЕ ИНТЕРФЕЙСА С ВАШИМ HTML ---
+// --- СВЯЗЫВАНИЕ С ИНТЕРФЕЙСОМ ---
 const turnIndicator = document.getElementById('turn-indicator');
 const timerDisplay = document.getElementById('timer');
 const controlsBlock = document.getElementById('controls');
@@ -40,37 +38,28 @@ const btnMove = document.getElementById('btn-move');
 const container = document.getElementById('canvas-container') || document.body;
 const scene = new THREE.Scene();
 
-// Загрузка бэкграунда
 const textureLoader = new THREE.TextureLoader();
 textureLoader.load('/assets/background.jpg', (bgTexture) => {
     scene.background = bgTexture;
 });
 
-// Базовый FOV для ПК
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// Балансируем камеру, чтобы поля умещались точно между кнопками и нижним краем экрана
 function updateCameraPosition() {
     const width = window.innerWidth;
     const height = window.innerHeight;
     const aspect = width / height;
 
     if (aspect < 1) {
-        // --- МОБИЛЬНАЯ ВЕРСИЯ ---
         camera.fov = BASE_FOV / aspect * 0.85; 
         camera.updateProjectionMatrix();
         camera.position.set(0, 42, 38); 
         camera.lookAt(0, -2, -5); 
     } else {
-        // --- ПК ВЕРСИЯ ---
         camera.fov = BASE_FOV;
         camera.updateProjectionMatrix();
-        
-        // Отодвинули назад по Z (47.5) и подняли (54.5)
         camera.position.set(0, 54.5, 47.5); 
-        
-        // Идеальное центрирование взгляда: снизу виден фон травы, сверху поля не залезают под кнопки
         camera.lookAt(0, -2, 2.5); 
     }
 }
@@ -144,7 +133,7 @@ function createBattlefields() {
 }
 createBattlefields();
 
-// --- ЗАГРУЗКА МОДЕЛИ САУ ---
+// --- ЗАГРУЗКА МОДЕЛИ ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
@@ -165,7 +154,6 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     if (gameState) renderUnits();
 });
 
-// --- ПОДСВЕТКА ВЫБРАННОЙ САУ ---
 function updateSelectionRing(unitGroup) {
     if (selectionRing) {
         if (selectionRing.parent) selectionRing.parent.remove(selectionRing);
@@ -209,7 +197,7 @@ function selectRandomAliveUnit() {
     }
 }
 
-// --- ОТРИСОВКА ЮНИТОВ И HP-БАРА ---
+// --- ОТРИСОВКА ЮНИТОВ И HP ---
 function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, hp) {
     const group = new THREE.Group();
     
@@ -248,7 +236,6 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
         group.add(model);
     }
 
-    // Привязываемся к классам из вашего HTML
     let hpContainer = document.getElementById(`hp-container-${id}`);
     if (!hpContainer) {
         hpContainer = document.createElement('div');
@@ -274,7 +261,6 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
 
 function updateHpBarsPositions() {
     const tempV = new THREE.Vector3();
-    
     Object.keys(visualUnits).forEach(id => {
         const group = visualUnits[id];
         const domId = group.userData.domId;
@@ -287,14 +273,12 @@ function updateHpBarsPositions() {
             
             const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
-            
-            // Используем только смещение, размеры контролирует CSS (.hp-bar-container)
             domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
         }
     });
 }
 
-// --- СПЛЭШ ЭФФЕКТЫ ---
+// --- СПЛЭШИ ---
 function createSplash(serverX, serverY, targetRole, type) {
     const color = 0x5c4033; 
     const particleCount = 25;
@@ -331,7 +315,6 @@ function spawnFireAndSmoke() {
     });
 }
 
-// --- УПРАВЛЕНИЕ АКТИВНЫМИ КЛАССАМИ КНОПОК ---
 function updateButtonVisuals() {
     if (currentMode === 'fire') {
         btnFire.classList.add('active');
@@ -414,6 +397,8 @@ window.addEventListener('click', (event) => {
         const clickedPlaneRole = hit.object.userData.targetRole;
 
         const offsetZ = (clickedPlaneRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
+        
+        // ПОЧИНКА КООРДИНАТ ДЛЯ MOVE И FIRE:
         const serverX = planeX + (FIELD_SIZE / 2);
         const serverY = planeZ + (FIELD_SIZE / 2) - offsetZ;
 
@@ -440,7 +425,7 @@ window.addEventListener('click', (event) => {
 // --- NETWORK ---
 socket.emit('joinGame');
 socket.on('waiting', () => { 
-    turnIndicator.innerText = "ОЖИДАНИЕ СОПЕРНИКА..."; 
+    turnIndicator.innerText = "WAITING FOR OPPONENT..."; 
     turnIndicator.style.color = "#ffa500";
     updateControlsVisibility(); 
 });
@@ -496,7 +481,11 @@ socket.on('fireResult', (data) => {
 
 socket.on('gameOver', (data) => { 
     document.querySelectorAll('.hp-bar-container').forEach(el => el.remove());
-    alert(data.winner === myId ? "ПОБЕДА!" : "ПОРАЖЕНИЕ!"); 
+    if (data.winner === 'system') {
+        alert("OPPONENT DISCONNECTED. YOU WIN!");
+    } else {
+        alert(data.winner === myId ? "VICTORY!" : "DEFEAT!"); 
+    }
     window.location.reload(); 
 });
 
@@ -504,13 +493,13 @@ function updateTurnUI() {
     if (!gameState) return;
 
     if (gameState.turn === myId) {
-        turnIndicator.innerText = "ВАШ ХОД!"; 
+        turnIndicator.innerText = "YOUR TURN!"; 
         turnIndicator.style.color = "#2ed573";
         if (!hasDoneActionThisTurn) { 
             currentMode = 'fire'; 
         }
     } else {
-        turnIndicator.innerText = "ХОД ПРОТИВНИКА..."; 
+        turnIndicator.innerText = "OPPONENT'S TURN..."; 
         turnIndicator.style.color = "#ff4757"; 
     }
     updateControlsVisibility();
