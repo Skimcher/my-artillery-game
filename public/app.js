@@ -19,9 +19,12 @@ const SPLASH_RADIUS = 4.0;
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 
+// --- НАСТРОЙКА КАМЕРЫ ДЛЯ ПОЛНОГО ОХВАТА НА СМАРТФОНАХ ---
 const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 51.0, 44.5);
-camera.lookAt(0, -2, 3.2);
+// Отодвинули по Z чуть дальше назад (было 44.5 -> стало 49.5) и подняли по Y (было 51.0 -> стало 55.0)
+camera.position.set(0, 55.0, 49.5);
+// Направили точку фокуса чуть ниже центра, чтобы полностью раскрыть нижнее поле
+camera.lookAt(0, -3.5, 2.5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -294,7 +297,6 @@ window.addEventListener('pointerdown', (e) => {
 
         if (currentMode === 'fire' && planeRole !== myRole) {
             hasDoneActionThisTurn = true;
-            // Делаем кнопки неактивными, но панель и таймер НЕ СКРЫВАЕМ
             if (btnFire) btnFire.style.display = 'none';
             if (btnMove) btnMove.style.display = 'none';
             socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY });
@@ -311,7 +313,6 @@ window.addEventListener('pointerdown', (e) => {
     }
 });
 
-// События сокетов для лобби и игры
 socket.on('waiting', (time) => { 
     if (info) { info.innerText = 'WAITING FOR OPPONENT...'; info.style.color = '#ff9f43'; }
     if (controls) controls.style.display = 'flex'; 
@@ -379,7 +380,6 @@ socket.on('gameOver', (data) => {
     window.location.reload();
 });
 
-// Централизованное и надежное обновление UI
 function updateTurnUI() {
     if (controls) controls.style.display = 'flex'; 
     if (timerEl) timerEl.style.display = 'block'; 
@@ -434,8 +434,26 @@ function animate() {
 }
 animate();
 
+// Умная адаптация FOV камеры под пропорции экрана при изменении размеров
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    
+    camera.aspect = width / height;
+    
+    // Если экран вертикальный (мобильный), искусственно расширяем FOV, чтобы нижний край влез
+    if (width < height) {
+        camera.fov = 52; 
+    } else {
+        camera.fov = 41; 
+    }
+    
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(width, height);
 });
+
+// Первичная проверка при инициализации игры
+if (window.innerWidth < window.innerHeight) {
+    camera.fov = 52;
+    camera.updateProjectionMatrix();
+}
