@@ -5,6 +5,7 @@ let currentMode = 'fire', hasDoneActionThisTurn = false, selectedUnitId = null;
 
 const visualUnits = {};
 let selectionRing = null;
+const activeParticles = []; // Массив для анимации частиц земли и огня
 
 const gltfLoader = new THREE.GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
@@ -13,7 +14,7 @@ let sauModelTemplate = null;
 const FIELD_SIZE = 25;
 const FIELD_OFFSET_Z = 13.5; 
 const DIRECT_RADIUS = 1.25;  
-const SPLASH_RADIUS = 4.0;   // Радиус осколков строго 4 метра
+const SPLASH_RADIUS = 4.0;   
 
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
@@ -121,6 +122,64 @@ function removeSelectionRing() {
     selectionRing = null;
 }
 
+// Функция генерации брызг земли (коричневые кубики)
+function createDirtSplash(x, z) {
+    const pCount = 40; // Количество кусочков земли
+    const geom = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x5c4033 }); // Коричневый цвет почвы
+
+    for (let i = 0; i < pCount; i++) {
+        const mesh = new THREE.Mesh(geom, mat);
+        // Спавним строго внутри критического радиуса черного круга
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * DIRECT_RADIUS;
+        mesh.position.set(x + Math.cos(angle) * radius, 0.3, z + Math.sin(angle) * radius);
+        
+        scene.add(mesh);
+
+        // Случайный импульс вверх и в стороны
+        activeParticles.push({
+            mesh: mesh,
+            type: 'dirt',
+            velocity: new THREE.Vector3(
+                (Math.random() - 0.5) * 4,
+                Math.random() * 6 + 3, // Сила взрыва вверх
+                (Math.random() - 0.5) * 4
+            ),
+            gravity: -9.8,
+            life: 2.0 // Живут 2 секунды
+        });
+    }
+}
+
+// Функция постоянного горения уничтоженной техники (оранжевые искры)
+function createFireEffect(parentGroup) {
+    const pCount = 15;
+    const geom = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff6a00, transparent: true }); // Оранжевый огонь
+
+    setInterval(() => {
+        if (!parentGroup.parent) return; // Если модель удалена, тушим
+        
+        const mesh = new THREE.Mesh(geom, mat.clone());
+        // Спавним над САУ
+        mesh.position.set(
+            parentGroup.position.x + (Math.random() - 0.5) * 2,
+            parentGroup.position.y + 0.5,
+            parentGroup.position.z + (Math.random() - 0.5) * 2
+        );
+        scene.add(mesh);
+
+        activeParticles.push({
+            mesh: mesh,
+            type: 'fire',
+            velocity: new THREE.Vector3((Math.random() - 0.5) * 1.5, Math.random() * 3 + 1, (Math.random() - 0.5) * 1.5),
+            gravity: 1.5, // Огонь тянет вверх, а не вниз
+            life: 0.8
+        });
+    }, 150); // Интервал создания языков пламени
+}
+
 function createVisualUnit(id, mX, mY, role, hp, isDestroyed) {
     const group = new THREE.Group();
     const offsetZ = (role === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
@@ -138,12 +197,16 @@ function createVisualUnit(id, mX, mY, role, hp, isDestroyed) {
         model.traverse((child) => {
             if (child.isMesh && isDestroyed) {
                 child.material = child.material.clone();
-                child.material.color.setHex(0x222222);
+                child.material.color.setHex(0x111111); // Делаем остов обугленным (темнее)
                 child.material.transparent = true;
-                child.material.opacity = 0.5;
+                child.material.opacity = 0.7;
             }
         });
         group.add(model);
+    }
+
+    if (isDestroyed) {
+        createFireEffect(group); // Включаем оранжевый огонь
     }
 
     let hpBar = document.getElementById(`hp-${id}`);
@@ -269,21 +332,21 @@ socket.on('fireResult', (data) => {
     const wX = data.x - (FIELD_SIZE / 2);
     const wZ = data.y - (FIELD_SIZE / 2) + offsetZ;
 
-    // Круг осколков (4м): Приподнят на Y=0.3, чтобы лежать НАД текстурой земли
     const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32).rotateX(-Math.PI / 2);
     const splashMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
     const splashMesh = new THREE.Mesh(splashGeo, splashMat);
     splashMesh.position.set(wX, 0.3, wZ); 
     scene.add(splashMesh);
 
-    // Круг прямого попадания (1.25м): Приподнят на Y=0.31, чтобы не пересекаться со сплэшем
     const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32).rotateX(-Math.PI / 2);
     const directMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     const directMesh = new THREE.Mesh(directGeo, directMat);
     directMesh.position.set(wX, 0.31, wZ); 
     scene.add(directMesh);
 
-    // Удаление кругов ровно через 2 секунды (2000 миллисекунд)
+    // Активируем вылет брызг земли из черного круга!
+    createDirtSplash(wX, wZ);
+
     setTimeout(() => {
         scene.remove(splashMesh);
         scene.remove(directMesh);
@@ -310,8 +373,43 @@ function updateTurnUI() {
     }
 }
 
+// Физический апдейт частиц в игровом цикле
+const clock = new THREE.Clock();
+
 function animate() {
     requestAnimationFrame(animate);
+    
+    const delta = clock.getDelta();
+
+    // Обсчет физики частиц (земля падает, огонь поднимается и исчезает)
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+        const p = activeParticles[i];
+        p.life -= delta;
+
+        if (p.life <= 0) {
+            scene.remove(p.mesh);
+            p.mesh.geometry.dispose();
+            if(p.mesh.material.dispose) p.mesh.material.dispose();
+            activeParticles.splice(i, 1);
+        } else {
+            if (p.type === 'dirt') {
+                // Земля летит по параболе вниз
+                p.velocity.y += p.gravity * delta;
+                p.mesh.position.addScaledVector(p.velocity, delta);
+                if (p.mesh.position.y < 0.3) {
+                    p.mesh.position.y = 0.3; // Упали на землю — остановились
+                    p.velocity.set(0,0,0);
+                }
+            } else if (p.type === 'fire') {
+                // Огонь поднимается вверх и плавно растворяется
+                p.mesh.position.y += p.velocity.y * delta;
+                p.mesh.position.x += p.velocity.x * delta;
+                p.mesh.position.z += p.velocity.z * delta;
+                p.mesh.material.opacity = p.life / 0.8; // Затухание альфы
+            }
+        }
+    }
+
     updateHpBarPositions();
     renderer.render(scene, camera);
 }
