@@ -1,6 +1,5 @@
 const socket = io();
 
-// Глобальный игровой статус
 let myRole = null, myId = null, gameState = null;
 let currentMode = 'fire', hasDoneActionThisTurn = false, selectedUnitId = null;
 
@@ -12,15 +11,13 @@ const textureLoader = new THREE.TextureLoader();
 let sauModelTemplate = null;
 
 const FIELD_SIZE = 25;
-const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра (свое и чужое)
-const DIRECT_RADIUS = 1.25;  // 2.5м диаметр -> 1.25м радиус
-const SPLASH_RADIUS = 4.13;
+const FIELD_OFFSET_Z = 13.5; 
+const DIRECT_RADIUS = 1.25;  // Диаметр 2.5м -> радиус 1.25м
+const SPLASH_RADIUS = 4.0;   // Новое значение: 4.0 метра
 
-// Создание 3D сцены
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 
-// Камера (ракурс 2.5D: сверху и чуть сзади/сбоку)
 const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 51.0, 44.5);
 camera.lookAt(0, -2, 3.2);
@@ -31,16 +28,13 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 container.appendChild(renderer.domElement);
 
-// Освещение
 scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
 dirLight.position.set(30, 60, 20);
 scene.add(dirLight);
 
-// Загрузка бэкграунда
 textureLoader.load('assets/background.jpg', (tex) => { scene.background = tex; });
 
-// Отрисовка полей и плоскостей для Raycast
 let fieldClickPlanes = [];
 function initFields() {
     const fieldGeometry = new THREE.BoxGeometry(FIELD_SIZE, 0.1, FIELD_SIZE);
@@ -57,7 +51,6 @@ function initFields() {
         scene.add(f2);
     });
 
-    // Невидимые плоскости для детекции кликов мышкой/тапов
     const clickGeo = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE).rotateX(-Math.PI / 2);
     const clickMat = new THREE.MeshBasicMaterial({ visible: false });
 
@@ -75,57 +68,33 @@ function initFields() {
 }
 initFields();
 
-// Загрузка шаблона САУ
 gltfLoader.load('models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
     const size = new THREE.Vector3(); box.getSize(size);
-    const scale = 3.0 / Math.max(size.x, size.y, size.z); // Модель ровно 3 метра
+    const scale = 3.0 / Math.max(size.x, size.y, size.z); // Ровно 3 метра модель САУ
     sauModelTemplate.scale.set(scale, scale, scale);
     if (gameState) renderUnits();
 });
 
-// Генерация UI
-const ui = document.createElement('div');
-ui.style.cssText = 'position:absolute; top:15px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; width:100%; pointer-events:none; z-index:99; font-family:sans-serif; text-align:center;';
-document.body.appendChild(ui);
+const info = document.getElementById('status-text');
+const timerEl = document.getElementById('timer-text');
+const controls = document.getElementById('controls-panel');
+const btnFire = document.getElementById('btn-fire');
+const btnMove = document.getElementById('btn-move');
 
-const info = document.createElement('div');
-info.style.cssText = 'font-size:24px; font-weight:bold; color:#fff; text-shadow:2px 2px 4px #000; margin-bottom:5px;';
-info.innerText = 'Connecting...';
-ui.appendChild(info);
-
-const timerEl = document.createElement('div');
-timerEl.style.cssText = 'font-size:18px; color:#fff; text-shadow:1px 1px 3px #000; margin-bottom:15px;';
-timerEl.innerText = 'TIME: 30';
-ui.appendChild(timerEl);
-
-const controls = document.createElement('div');
-controls.style.cssText = 'display:none; gap:15px; pointer-events:auto;';
-ui.appendChild(controls);
-
-const btnFire = document.createElement('button');
-btnFire.innerText = 'FIRE';
-btnFire.style.cssText = 'padding:12px 30px; font-size:16px; font-weight:bold; cursor:pointer; background:#2ed573; color:#fff; border:2px solid #fff; border-radius:6px;';
-controls.appendChild(btnFire);
-
-const btnMove = document.createElement('button');
-btnMove.innerText = 'MOVE';
-btnMove.style.cssText = 'padding:12px 30px; font-size:16px; font-weight:bold; cursor:pointer; background:#333; color:#fff; border:2px solid #555; border-radius:6px;';
-controls.appendChild(btnMove);
-
-function updateButtons() {
+function updateButtonsUI() {
     if (currentMode === 'fire') {
-        btnFire.style.background = '#2ed573'; btnFire.style.borderColor = '#fff';
-        btnMove.style.background = '#333'; btnMove.style.borderColor = '#555';
+        btnFire.className = 'btn-action btn-fire-active';
+        btnMove.className = 'btn-action btn-inactive';
     } else {
-        btnMove.style.background = '#1e90ff'; btnMove.style.borderColor = '#fff';
-        btnFire.style.background = '#333'; btnFire.style.borderColor = '#555';
+        btnMove.className = 'btn-action btn-move-active';
+        btnFire.className = 'btn-action btn-inactive';
     }
 }
 
-btnFire.addEventListener('click', (e) => { e.stopPropagation(); currentMode = 'fire'; removeSelectionRing(); selectedUnitId = null; updateButtons(); });
-btnMove.addEventListener('click', (e) => { e.stopPropagation(); currentMode = 'move'; updateButtons(); autoSelectUnit(); });
+btnFire.addEventListener('click', (e) => { e.stopPropagation(); currentMode = 'fire'; removeSelectionRing(); selectedUnitId = null; updateButtonsUI(); });
+btnMove.addEventListener('click', (e) => { e.stopPropagation(); currentMode = 'move'; updateButtonsUI(); autoSelectUnit(); });
 
 function autoSelectUnit() {
     if (!gameState || !myRole) return;
@@ -152,12 +121,10 @@ function removeSelectionRing() {
     selectionRing = null;
 }
 
-// Создание юнита
 function createVisualUnit(id, mX, mY, role, hp, isDestroyed) {
     const group = new THREE.Group();
     const offsetZ = (role === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
     
-    // Перевод метров (0..25) в 3D мировые координаты сцены
     const wX = mX - (FIELD_SIZE / 2);
     const wZ = mY - (FIELD_SIZE / 2) + offsetZ;
     
@@ -179,13 +146,12 @@ function createVisualUnit(id, mX, mY, role, hp, isDestroyed) {
         group.add(model);
     }
 
-    // HP полоска через DOM
     let hpBar = document.getElementById(`hp-${id}`);
     if (!hpBar) {
         hpBar = document.createElement('div');
         hpBar.id = `hp-${id}`;
-        hpBar.style.cssText = 'position:absolute; width:45px; height:6px; background:rgba(0,0,0,0.5); border:1px solid #fff; pointer-events:none; z-index:10;';
-        hpBar.innerHTML = '<div class="fill" style="height:100%; background:#2ed573;"></div>';
+        hpBar.className = 'hp-bar';
+        hpBar.innerHTML = '<div class="fill"></div>';
         document.body.appendChild(hpBar);
     }
     
@@ -224,7 +190,7 @@ function renderUnits() {
 
     ['p1', 'p2'].forEach(role => {
         gameState.players[role].units.forEach((u, i) => {
-            if (u.x === -1000) return; // Скрыт туманом войны
+            if (u.x === -1000) return; 
             createVisualUnit(`${role}_${i}`, u.x, u.y, role, u.hp, u.destroyed);
         });
     });
@@ -234,7 +200,6 @@ function renderUnits() {
     }
 }
 
-// Обработка кликов на поля
 window.addEventListener('pointerdown', (e) => {
     if (e.target.tagName === 'BUTTON' || !gameState || gameState.turn !== myId || hasDoneActionThisTurn) return;
 
@@ -242,7 +207,6 @@ window.addEventListener('pointerdown', (e) => {
     const mouse = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
     raycaster.setFromCamera(mouse, camera);
 
-    // Выбор сау вручную кликом в режиме MOVE
     if (currentMode === 'move') {
         const meshes = Object.values(visualUnits);
         const hits = raycaster.intersectObjects(meshes, true);
@@ -261,14 +225,12 @@ window.addEventListener('pointerdown', (e) => {
         }
     }
 
-    // Клики по плоскостям полей
     const intersects = raycaster.intersectObjects(fieldClickPlanes);
     if (intersects.length > 0) {
         const hit = intersects[0];
         const planeRole = hit.object.userData.role;
         const offsetZ = (planeRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
 
-        // Перевод мировых координат клика обратно в метры (0..25)
         const serverX = hit.point.x + (FIELD_SIZE / 2);
         const serverY = hit.point.z + (FIELD_SIZE / 2) - offsetZ;
 
@@ -282,13 +244,12 @@ window.addEventListener('pointerdown', (e) => {
             hasDoneActionThisTurn = true;
             controls.style.display = 'none';
             removeSelectionRing();
-            socket.emit('playerAction', { type: 'move', type: 'move', unitIndex: idx, x: serverX, y: serverY });
+            socket.emit('playerAction', { type: 'move', unitIndex: idx, x: serverX, y: serverY });
             selectedUnitId = null;
         }
     }
 });
 
-// Сокеты сети
 socket.on('waiting', () => { info.innerText = 'WAITING FOR OPPONENT...'; info.style.color = '#ff9f43'; });
 socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
 socket.on('timerUpdate', (t) => { timerEl.innerText = `TIME: ${t}`; });
@@ -300,22 +261,31 @@ socket.on('fireResult', (data) => {
     const wX = data.x - (FIELD_SIZE / 2);
     const wZ = data.y - (FIELD_SIZE / 2) + offsetZ;
 
+    // Круг осколков: Серый, 70% непрозрачности (0.7 opacity)
     const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32).rotateX(-Math.PI / 2);
-    const splashMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+    const splashMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
     const splashMesh = new THREE.Mesh(splashGeo, splashMat);
     splashMesh.position.set(wX, 0.02, wZ);
     scene.add(splashMesh);
 
+    // Круг прямого попадания: Черный, 90% непрозрачности (0.9 opacity)
     const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32).rotateX(-Math.PI / 2);
     const directMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     const directMesh = new THREE.Mesh(directGeo, directMat);
     directMesh.position.set(wX, 0.03, wZ);
     scene.add(directMesh);
+
+    // Новое изменение: оба круга исчезают строго через 2 секунды
+    setTimeout(() => {
+        scene.remove(splashMesh);
+        scene.remove(directMesh);
+    }, 2000);
 });
 
 socket.on('gameOver', (data) => {
-    document.querySelectorAll('[id^="hp-"]').forEach(el => el.remove());
-    if (data.winner === 'opponent_disconnected') alert('Opponent disconnected. You win!');
+    document.querySelectorAll('.hp-bar').forEach(el => el.remove());
+    if (data.winner === 'timeout_no_opponent') alert('Lobby closed: No opponent connected within 300 seconds.');
+    else if (data.winner === 'opponent_disconnected') alert('Opponent disconnected. You win!');
     else alert(data.winner === myId ? 'VICTORY!' : 'DEFEAT!');
     window.location.reload();
 });
@@ -325,14 +295,13 @@ function updateTurnUI() {
         info.innerText = 'YOUR TURN!'; info.style.color = '#2ed573';
         controls.style.display = 'flex';
         currentMode = 'fire';
-        updateButtons();
+        updateButtonsUI();
     } else {
         info.innerText = "OPPONENT'S TURN..."; info.style.color = '#ff4757';
         controls.style.display = 'none';
     }
 }
 
-// Рендер цикл
 function animate() {
     requestAnimationFrame(animate);
     updateHpBarPositions();
