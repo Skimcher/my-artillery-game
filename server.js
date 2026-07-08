@@ -5,27 +5,20 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// БРОНЕБОЙНАЯ НАСТРОЙКА CORS для Itch.io фреймов
 const io = require('socket.io')(server, {
-    cors: {
-        origin: "*", 
-        methods: ["GET", "POST"],
-        allowedHeaders: ["my-custom-header"],
-        credentials: true
-    }
+    cors: { origin: "*", methods: ["GET", "POST"], credentials: true }
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 const FIELD_SIZE = 25;
 let waitingPlayer = null;
-const activeGames = {}; // room -> game state
+const activeGames = {}; 
 
-// ТАЙМИНГИ ИЗМЕНЕНЫ ПО ВАШЕМУ ТРЕБОВАНИЮ:
-const TURN_TIME_LIMIT = 9;      // Время на ход: 9 секунд
-const MATCHMAKING_TIMEOUT = 300; // Время ожидания соперника: 300 секунд
+const TURN_TIME_LIMIT = 9;      
+const MATCHMAKING_TIMEOUT = 300; 
 
-let matchmakingTimers = {};
+let matchmakingIntervals = {};
 
 function getRandomPosition() {
     const min = 2;
@@ -66,7 +59,6 @@ function startTurnTimer(room) {
             clearInterval(timerIntervals[room]);
             return;
         }
-        
         state.timer--;
         io.to(room).emit('timerUpdate', state.timer);
         
@@ -79,27 +71,32 @@ function startTurnTimer(room) {
 }
 
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
-
     socket.on('joinGame', () => {
         if (!waitingPlayer) {
             waitingPlayer = socket;
             socket.emit('waiting');
-
-            // Запускаем таймер ожидания на 300 секунд для первого игрока
-            matchmakingTimers[socket.id] = setTimeout(() => {
-                if (waitingPlayer && waitingPlayer.id === socket.id) {
-                    waitingPlayer.emit('gameOver', { winner: 'timeout' });
-                    waitingPlayer = null;
+            
+            // Запуск видимого отсчета 300 секунд
+            let timeLeft = MATCHMAKING_TIMEOUT;
+            socket.emit('timerUpdate', timeLeft);
+            
+            matchmakingIntervals[socket.id] = setInterval(() => {
+                timeLeft--;
+                socket.emit('timerUpdate', timeLeft);
+                
+                if (timeLeft <= 0) {
+                    clearInterval(matchmakingIntervals[socket.id]);
+                    if (waitingPlayer && waitingPlayer.id === socket.id) {
+                        waitingPlayer.emit('gameOver', { winner: 'timeout' });
+                        waitingPlayer = null;
+                    }
                 }
-                delete matchmakingTimers[socket.id];
-            }, MATCHMAKING_TIMEOUT * 1000);
+            }, 1000);
 
         } else {
-            // Очищаем таймер ожидания, так как соперник нашелся
-            if (matchmakingTimers[waitingPlayer.id]) {
-                clearTimeout(matchmakingTimers[waitingPlayer.id]);
-                delete matchmakingTimers[waitingPlayer.id];
+            if (matchmakingIntervals[waitingPlayer.id]) {
+                clearInterval(matchmakingIntervals[waitingPlayer.id]);
+                delete matchmakingIntervals[waitingPlayer.id];
             }
 
             const p1 = waitingPlayer;
@@ -129,7 +126,6 @@ io.on('connection', (socket) => {
         const state = activeGames[room];
 
         if (!state || state.turn !== socket.id) return;
-
         const opponentRole = (role === 'p1') ? 'p2' : 'p1';
 
         if (action.type === 'fire') {
@@ -176,9 +172,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        if (matchmakingTimers[socket.id]) {
-            clearTimeout(matchmakingTimers[socket.id]);
-            delete matchmakingTimers[socket.id];
+        if (matchmakingIntervals[socket.id]) {
+            clearInterval(matchmakingIntervals[socket.id]);
+            delete matchmakingIntervals[socket.id];
         }
         if (waitingPlayer && waitingPlayer.id === socket.id) {
             waitingPlayer = null;
@@ -193,6 +189,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
