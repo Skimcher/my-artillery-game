@@ -307,9 +307,13 @@ window.addEventListener('pointerdown', (e) => {
     }
 });
 
+// Состояние ожидания (лобби)
 socket.on('waiting', (time) => { 
     info.innerText = 'WAITING FOR OPPONENT...'; 
     info.style.color = '#ff9f43'; 
+    controls.style.display = 'flex'; // Показываем плашку для таймера лобби
+    btnFire.style.display = 'none';
+    btnMove.style.display = 'none';
     timerEl.innerText = `${time}s`;
 });
 
@@ -363,25 +367,21 @@ socket.on('gameOver', (data) => {
     window.location.reload();
 });
 
+// Исправленное переключение интерфейса ходов
 function updateTurnUI() {
+    controls.style.display = 'flex'; // ВЕРХНЯЯ ПАНЕЛЬ СЕЙЧАС ВСЕГДА КОРРЕКТНО ОТОБРАЖАЕТСЯ
+
     if (gameState.turn === myRole) {
-        info.innerText = ''; // НАДПИСЬ ИСЧЕЗАЕТ в ваш ход, чтобы не захламлять центр экрана!
-        controls.style.display = 'flex'; // Тонкая панель появляется строго сверху
+        info.innerText = ''; // "Your turn" текст скрыт, чтобы не мешать
+        btnFire.style.display = 'block'; // Кнопки видны
+        btnMove.style.display = 'block';
         currentMode = 'fire';
         updateButtonsUI();
     } else {
         info.innerText = "OPPONENT'S TURN..."; 
         info.style.color = '#ff4757';
-        controls.style.display = 'flex'; // Панель активна и сверху, но кнопки внутри скрыты/недоступны
-        // Нам нужно оставить видимым только таймер в ход оппонента:
-        btnFire.style.display = 'none';
+        btnFire.style.display = 'none'; // Скрываем только кнопки, таймер справа ОСТАЕТСЯ!
         btnMove.style.display = 'none';
-    }
-    
-    // Возвращаем кнопки на место, если ход наш
-    if (gameState.turn === myRole) {
-        btnFire.style.display = 'block';
-        btnMove.style.display = 'block';
     }
 }
 
