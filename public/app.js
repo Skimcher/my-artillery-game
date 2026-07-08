@@ -29,27 +29,12 @@ const DIRECT_RADIUS = 0.97;  // Итоговый критический ради
 const SPLASH_RADIUS = 4.13;  // Итоговый радиус осколков
 const FIELD_OFFSET_Z = 13.5; // Смещение полей от центра
 
-// --- ДОБАВЛЯЕМ СТИЛИ ДЛЯ ИГРЫ ВО ВЕСЬ ЭКРАН ---
-const style = document.createElement('style');
-style.innerHTML = `
-    html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        position: fixed; 
-        background-color: #000;
-    }
-    #canvas-container {
-        width: 100vw;
-        height: 100vh;
-        position: absolute;
-        top: 0;
-        left: 0;
-    }
-`;
-document.head.appendChild(style);
+// --- СВЯЗЫВАНИЕ ИНТЕРФЕЙСА С ВАШИМ HTML ---
+const turnIndicator = document.getElementById('turn-indicator');
+const timerDisplay = document.getElementById('timer');
+const controlsBlock = document.getElementById('controls');
+const btnFire = document.getElementById('btn-fire');
+const btnMove = document.getElementById('btn-move');
 
 // --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container') || document.body;
@@ -65,14 +50,14 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// ИСПРАВЛЕНО: Балансируем камеру, чтобы поля умещались точно между кнопками и нижним краем экрана
+// Балансируем камеру, чтобы поля умещались точно между кнопками и нижним краем экрана
 function updateCameraPosition() {
     const width = window.innerWidth;
     const height = window.innerHeight;
     const aspect = width / height;
 
     if (aspect < 1) {
-        // --- МОБИЛЬНАЯ ВЕРСИЯ (Без изменений) ---
+        // --- МОБИЛЬНАЯ ВЕРСИЯ ---
         camera.fov = BASE_FOV / aspect * 0.85; 
         camera.updateProjectionMatrix();
         camera.position.set(0, 42, 38); 
@@ -263,6 +248,7 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
         group.add(model);
     }
 
+    // Привязываемся к классам из вашего HTML
     let hpContainer = document.getElementById(`hp-container-${id}`);
     if (!hpContainer) {
         hpContainer = document.createElement('div');
@@ -272,36 +258,8 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
         document.body.appendChild(hpContainer);
     }
 
-    hpContainer.style.position = 'absolute';
-    hpContainer.style.top = '0';
-    hpContainer.style.left = '0';
-    hpContainer.style.width = '40px';         
-    hpContainer.style.height = '6px';          
-    hpContainer.style.background = 'rgba(0, 0, 0, 0.6)';
-    hpContainer.style.border = '1px solid #ffffff';
-    hpContainer.style.pointerEvents = 'none';
-    hpContainer.style.zIndex = '9999';          
-
     const fill = hpContainer.querySelector('.hp-bar-fill');
     const text = hpContainer.querySelector('.hp-bar-text');
-
-    if (fill) {
-        fill.style.height = '100%';
-        fill.style.background = '#2ed573';      
-        fill.style.transition = 'width 0.2s ease';
-    }
-
-    if (text) {
-        text.style.position = 'absolute';
-        text.style.top = '-14px';
-        text.style.width = '100%';
-        text.style.textAlign = 'center';
-        text.style.color = '#ffffff';
-        text.style.fontSize = '9px';
-        text.style.fontWeight = 'bold';
-        text.style.fontFamily = 'sans-serif';
-        text.style.textShadow = '1px 1px 2px #000000';
-    }
 
     if (isDestroyed) {
         hpContainer.style.display = 'none'; 
@@ -316,8 +274,6 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
 
 function updateHpBarsPositions() {
     const tempV = new THREE.Vector3();
-    const isMobile = window.innerWidth <= 768;
-    const hpScale = isMobile ? 'scale(0.8)' : 'scale(2.0)';
     
     Object.keys(visualUnits).forEach(id => {
         const group = visualUnits[id];
@@ -332,7 +288,8 @@ function updateHpBarsPositions() {
             const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
             
-            domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px) ${hpScale}`;
+            // Используем только смещение, размеры контролирует CSS (.hp-bar-container)
+            domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
         }
     });
 }
@@ -374,119 +331,24 @@ function spawnFireAndSmoke() {
     });
 }
 
-// --- СОЗДАНИЕ И ПОЗИЦИОНИРОВАНИЕ ИНТЕРФЕЙСА ---
-let uiContainer = document.getElementById('ui-container');
-if (!uiContainer) {
-    uiContainer = document.createElement('div');
-    uiContainer.id = 'ui-container';
-    document.body.appendChild(uiContainer);
-}
-
-uiContainer.innerHTML = '';
-
-const turnIndicator = document.createElement('div');
-turnIndicator.id = 'turn-indicator';
-turnIndicator.innerText = "ПОДКЛЮЧЕНИЕ...";
-uiContainer.appendChild(turnIndicator);
-
-const timerBlock = document.createElement('div');
-timerBlock.id = 'timer-block';
-timerBlock.innerHTML = `Время: <span id="timer-val">0</span>с`;
-uiContainer.appendChild(timerBlock);
-const timerDisplay = document.getElementById('timer-val');
-
-const controls = document.createElement('div');
-controls.id = 'controls';
-uiContainer.appendChild(controls);
-
-const btnFire = document.createElement('button');
-btnFire.id = 'btn-fire';
-btnFire.innerText = 'FIRE';
-controls.appendChild(btnFire);
-
-const btnMove = document.createElement('button');
-btnMove.id = 'btn-move';
-btnMove.innerText = 'MOVE';
-controls.appendChild(btnMove);
-
-const styleUI = () => {
-    uiContainer.style.position = 'absolute';
-    uiContainer.style.top = '10px'; 
-    uiContainer.style.left = '50%';
-    uiContainer.style.transform = 'translateX(-50%)';
-    uiContainer.style.display = 'flex';
-    uiContainer.style.flexDirection = 'column';
-    uiContainer.style.alignItems = 'center';
-    uiContainer.style.width = '100vw';
-    uiContainer.style.pointerEvents = 'none';
-    uiContainer.style.zIndex = '99999';
-    uiContainer.style.textAlign = 'center';
-
-    turnIndicator.style.fontFamily = 'sans-serif';
-    turnIndicator.style.fontWeight = 'bold';
-    turnIndicator.style.textShadow = '2px 2px 4px #000000';
-    turnIndicator.style.pointerEvents = 'auto';
-    turnIndicator.style.margin = '0';
-
-    timerBlock.style.fontFamily = 'sans-serif';
-    timerBlock.style.fontWeight = 'bold';
-    timerBlock.style.color = '#ffffff';
-    timerBlock.style.textShadow = '2px 2px 4px #000000';
-    timerBlock.style.margin = '2px 0 6px 0';
-    timerBlock.style.pointerEvents = 'auto';
-
-    controls.style.position = 'static';
-    controls.style.transform = 'none';
-    controls.style.gap = '12px';
-    controls.style.pointerEvents = 'auto';
-
-    [btnFire, btnMove].forEach(btn => {
-        btn.style.fontWeight = 'bold';
-        btn.style.cursor = 'pointer';
-        btn.style.color = '#ffffff';
-        btn.style.borderRadius = '5px';
-        btn.style.border = '2px solid #555555';
-        btn.style.transition = 'all 0.1s ease';
-        btn.style.boxShadow = '0px 3px 5px rgba(0,0,0,0.4)';
-    });
-};
-styleUI();
-
+// --- УПРАВЛЕНИЕ АКТИВНЫМИ КЛАССАМИ КНОПОК ---
 function updateButtonVisuals() {
     if (currentMode === 'fire') {
-        btnFire.style.background = '#2ed573';
-        btnFire.style.borderColor = '#ffffff';
-        btnMove.style.background = '#333333';
-        btnMove.style.borderColor = '#555555';
+        btnFire.classList.add('active');
+        btnMove.classList.remove('active');
     } else {
-        btnMove.style.background = '#1e90ff';
-        btnMove.style.borderColor = '#ffffff';
-        btnFire.style.background = '#333333';
-        btnFire.style.borderColor = '#555555';
+        btnMove.classList.add('active');
+        btnFire.classList.remove('active');
     }
 }
 
-// ИСПРАВЛЕНО: Уменьшены размеры кнопок для ПК версии, чтобы они не перекрывали игровое поле
-function applyMobileLayout() {
-    const isMobile = window.innerWidth <= 768;
-    
-    turnIndicator.style.fontSize = isMobile ? '16px' : '26px'; 
-    timerBlock.style.fontSize = isMobile ? '13px' : '18px';
-
-    controls.style.flexDirection = 'row';
-    [btnFire, btnMove].forEach(btn => {
-        // Уменьшенный компактный размер для ПК: padding 8px 18px
-        btn.style.padding = isMobile ? '8px 18px' : '8px 18px';
-        btn.style.fontSize = isMobile ? '14px' : '13px';
-    });
-
+function updateControlsVisibility() {
     const isMyTurn = gameState && gameState.turn === myId;
     if (!gameState || hasDoneActionThisTurn || !isMyTurn) {
-        controls.style.setProperty('display', 'none', 'important');
+        controlsBlock.classList.add('hidden');
     } else {
-        controls.style.setProperty('display', 'flex', 'important');
+        controlsBlock.classList.remove('hidden');
     }
-    
     updateButtonVisuals();
 }
 
@@ -557,7 +419,7 @@ window.addEventListener('click', (event) => {
 
         if (currentMode === 'fire') {
             hasDoneActionThisTurn = true; 
-            controls.style.setProperty('display', 'none', 'important');
+            controlsBlock.classList.add('hidden');
             socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY, forcedRole: myRole });
         } 
         else if (currentMode === 'move') {
@@ -565,7 +427,7 @@ window.addEventListener('click', (event) => {
                 const unitIndex = parseInt(selectedUnitId.split('_')[1]);
                 
                 hasDoneActionThisTurn = true; 
-                controls.style.setProperty('display', 'none', 'important');
+                controlsBlock.classList.add('hidden');
                 updateSelectionRing(null); 
                 
                 socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: unitIndex, forcedRole: myRole });
@@ -580,7 +442,7 @@ socket.emit('joinGame');
 socket.on('waiting', () => { 
     turnIndicator.innerText = "ОЖИДАНИЕ СОПЕРНИКА..."; 
     turnIndicator.style.color = "#ffa500";
-    applyMobileLayout(); 
+    updateControlsVisibility(); 
 });
 socket.on('gameStart', (data) => { 
     myRole = data.role; 
@@ -651,7 +513,7 @@ function updateTurnUI() {
         turnIndicator.innerText = "ХОД ПРОТИВНИКА..."; 
         turnIndicator.style.color = "#ff4757"; 
     }
-    applyMobileLayout();
+    updateControlsVisibility();
 }
 
 function renderUnits() {
@@ -712,7 +574,7 @@ window.addEventListener('resize', () => {
     updateCameraPosition();
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-    applyMobileLayout(); 
+    updateControlsVisibility(); 
 });
 
-setTimeout(applyMobileLayout, 100);
+setTimeout(updateControlsVisibility, 100);
