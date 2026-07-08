@@ -4,6 +4,7 @@ const socket = io('https://artillery-game2.onrender.com', {
     forceNew: true
 });
 
+// --- GAME STATE ---
 let myRole = null;          
 let myId = null;            
 let gameState = null;       
@@ -26,12 +27,14 @@ const DIRECT_RADIUS = 0.97;
 const SPLASH_RADIUS = 4.13;  
 const FIELD_OFFSET_Z = 13.5; 
 
+// --- INTERACTION WITH DOM ---
 const turnIndicator = document.getElementById('turn-indicator');
 const timerDisplay = document.getElementById('timer');
 const controlsBlock = document.getElementById('controls');
 const btnFire = document.getElementById('btn-fire');
 const btnMove = document.getElementById('btn-move');
 
+// --- THREE.JS SETUP ---
 const container = document.getElementById('canvas-container') || document.body;
 const scene = new THREE.Scene();
 
@@ -89,7 +92,7 @@ function createBattlefields() {
     
     scene.add(visualField1, visualField2);
 
-    // Границы
+    // Outlines
     const geometry = new THREE.BufferGeometry();
     const half = FIELD_SIZE / 2;
     const vertices = [
@@ -107,7 +110,7 @@ function createBattlefields() {
     outline2.position.set(0, 0.06, -FIELD_OFFSET_Z);
     scene.add(outline1, outline2);
 
-    // Кликовые плоскости
+    // Interactive Planes for Raycasting
     const clickGeo = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE);
     clickGeo.rotateX(-Math.PI / 2);
     const clickMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -125,6 +128,7 @@ function createBattlefields() {
 }
 createBattlefields();
 
+// --- MODEL LOADING ---
 gltfLoader.load('/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
@@ -180,6 +184,7 @@ function selectRandomAliveUnit() {
     }
 }
 
+// --- CREATING UNITS AND HP BARS ---
 function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, hp) {
     const group = new THREE.Group();
     const offsetZ = (owner === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
@@ -229,7 +234,7 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     if (isDestroyed) {
         hpContainer.style.display = 'none'; 
     } else {
-        hpContainer.style.display = 'block'; // Включаем видимость принудительно
+        hpContainer.style.display = 'block'; 
         if (fill) fill.style.width = `${hp}%`;
         if (text) text.innerText = `${hp} HP`;
     }
@@ -246,7 +251,7 @@ function updateHpBarsPositions() {
         
         if (domEl && domEl.style.display !== 'none') {
             group.getWorldPosition(tempV);
-            tempV.y += 3.5; // Чуть приподняли над башней САУ
+            tempV.y += 3.5; 
             tempV.project(camera);
             
             const x = (tempV.x * .5 + .5) * window.innerWidth;
@@ -256,6 +261,7 @@ function updateHpBarsPositions() {
     });
 }
 
+// --- SPECIAL EFFECTS ---
 function createSplash(serverX, serverY, targetRole, type) {
     const color = 0x5c4033; 
     const offsetZ = (targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
@@ -281,6 +287,7 @@ function spawnFireAndSmoke() {
     });
 }
 
+// --- UI AND INPUT CONTROL ---
 function updateButtonVisuals() {
     if (currentMode === 'fire') {
         btnFire.classList.add('active');
@@ -363,36 +370,51 @@ window.addEventListener('click', (event) => {
     }
 });
 
+// --- NETWORKING (SOCKET.IO) ---
 socket.emit('joinGame');
+
 socket.on('waiting', () => { 
     turnIndicator.innerText = "WAITING FOR OPPONENT..."; 
     turnIndicator.style.color = "#ffa500";
     updateControlsVisibility(); 
 });
-socket.on('gameStart', (data) => { 
-    myRole = data.role; myId = socket.id; gameState = data.state; 
-    
-    // ТУМАН ВОЙНЫ: Прячем чужую платформу из рендера
-    if (myRole === 'p1') {
-        if(visualField2) visualField2.visible = false;
-        if(outline2) outline2.visible = false;
-    } else {
-        if(visualField1) visualField1.visible = false;
-        if(outline1) outline1.visible = false;
-    }
 
-    updateTurnUI(); renderUnits(); 
+socket.on('gameStart', (data) => { 
+    myRole = data.role; 
+    myId = socket.id; 
+    gameState = data.state; 
+    
+    // ПОЛЯ ТЕПЕРЬ ВСЕГДА ОСТАЮТСЯ ВИДИМЫ ДЛЯ ОБЕИХ СТОРОН, ЧТОБЫ БЫЛО КУДА СТРЕЛЯТЬ
+    if (visualField1) visualField1.visible = true;
+    if (outline1) outline1.visible = true;
+    if (visualField2) visualField2.visible = true;
+    if (outline2) outline2.visible = true;
+
+    updateTurnUI(); 
+    renderUnits(); 
 });
-socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
+
+socket.on('timerUpdate', (time) => { 
+    timerDisplay.innerText = time; 
+});
+
 socket.on('turnChanged', (data) => { 
-    gameState = data.state || gameState; gameState.turn = data.turn; 
-    timerDisplay.innerText = data.timer; hasDoneActionThisTurn = false; 
-    selectedUnitId = null; updateSelectionRing(null); updateTurnUI(); 
+    gameState = data.state || gameState; 
+    gameState.turn = data.turn; 
+    timerDisplay.innerText = data.timer; 
+    hasDoneActionThisTurn = false; 
+    selectedUnitId = null; 
+    updateSelectionRing(null); 
+    updateTurnUI(); 
+    renderUnits(); 
 });
-socket.on('gameStateUpdate', (newState) => { gameState = newState; renderUnits(); });
+
+socket.on('gameStateUpdate', (newState) => { 
+    gameState = newState; 
+    renderUnits(); 
+});
 
 socket.on('fireResult', (data) => {
-    // Вспышка взрыва видна на любой стороне
     createSplash(data.x, data.y, data.targetRole, data.result);
 
     const offsetZ = (data.targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
@@ -426,66 +448,55 @@ socket.on('gameOver', (data) => {
 function updateTurnUI() {
     if (!gameState) return;
     if (gameState.turn === myId) {
-        turnIndicator.innerText = "YOUR TURN!"; turnIndicator.style.color = "#2ed573";
+        turnIndicator.innerText = "YOUR TURN!"; 
+        turnIndicator.style.color = "#2ed573";
         if (!hasDoneActionThisTurn) currentMode = 'fire'; 
     } else {
-        turnIndicator.innerText = "OPPONENT'S TURN..."; turnIndicator.style.color = "#ff4757"; 
+        turnIndicator.innerText = "OPPONENT'S TURN..."; 
+        turnIndicator.style.color = "#ff4757"; 
     }
     updateControlsVisibility();
 }
 
+// --- FOG OF WAR ENGINE RENDER ---
 function renderUnits() {
     const activeIdBeforeRender = selectedUnitId;
+    
+    // Clear old elements from scene & safely hide HP divs
     Object.keys(visualUnits).forEach(id => {
         const el = document.getElementById(`hp-container-${id}`);
         if (el) el.style.display = 'none';
         scene.remove(visualUnits[id]);
+        delete visualUnits[id]; 
     });
+    
     burningUnitsPositions.length = 0; 
-    if (!gameState || !gameState.players) return;
+    if (!gameState || !gameState.players || !myRole) return;
 
-    const p1 = gameState.players.p1; const p2 = gameState.players.p2;
+    const p1 = gameState.players.p1; 
+    const p2 = gameState.players.p2;
 
-    // ТУМАН ВОЙНЫ: рендерим врагов ТОЛЬКО если они уже уничтожены (чтобы видеть остов)
+    // --- RENDERING PLAYER 1 (P1) BLOCKS ---
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
-            if (myRole === 'p2' && !unit.destroyed) return; // Прячем живых врагов
+            if (unit.x === -1000 || unit.y === -1000) return;
+
+            // FOG OF WAR: Если я Игрок 2, и вражеский юнит ЖИВ — полный игнор отрисовки
+            if (myRole === 'p2' && !unit.destroyed) {
+                return; 
+            }
+
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1', unit.hp);
-            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) + FIELD_OFFSET_Z });
+            if (unit.destroyed) {
+                burningUnitsPositions.push({ 
+                    x: unit.x - (FIELD_SIZE / 2), 
+                    z: unit.y - (FIELD_SIZE / 2) + FIELD_OFFSET_Z 
+                });
+            }
         });
     }
+
+    // --- RENDERING PLAYER 2 (P2) BLOCKS ---
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
-            if (myRole === 'p1' && !unit.destroyed) return; // Прячем живых врагов
-            createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
-            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) - FIELD_OFFSET_Z });
-        });
-    }
-
-    if (activeIdBeforeRender && visualUnits[activeIdBeforeRender]) {
-        selectedUnitId = activeIdBeforeRender;
-        updateSelectionRing(visualUnits[selectedUnitId]);
-    }
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-    spawnFireAndSmoke();
-    updateHpBarsPositions();
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.mesh.position.x += p.vX; p.mesh.position.y += p.vY; p.mesh.position.z += p.vZ;
-        p.vY -= 0.005; p.life--;
-        if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
-    }
-    renderer.render(scene, camera);
-}
-animate();
-
-window.addEventListener('resize', () => {
-    updateCameraPosition();
-    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    updateControlsVisibility(); 
-});
-setTimeout(updateControlsVisibility, 100);
+            if (unit.x === -1000 || unit.y === -1
