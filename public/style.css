@@ -20,34 +20,38 @@ html, body {
     z-index: 1;
 }
 
-/* Компактная верхняя панель управления (строго по центру сверху) */
-#controls-panel {
+/* Главная панель управления — поднята максимально вверх (5px от края) */
+#controls-panel, #ui-container {
     position: absolute;
-    top: 15px;
+    top: 5px; /* Сдвинули в самый верх */
     left: 50%;
     transform: translateX(-50%);
-    display: none; /* Включается/выключается динамически из JS */
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
+    display: none; /* Управляется динамически из JS */
+    
+    /* СТРОГО В ОДНУ ЛИНИЮ: FIRE -> MOVE -> ТАЙМЕР */
+    flex-direction: row !important; 
+    align-items: center !important;
+    
+    gap: 10px;
     background: rgba(15, 20, 30, 0.85);
-    padding: 6px 16px;
-    border-radius: 25px;
+    padding: 4px 14px;
+    border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    z-index: 100;
+    z-index: 9999 !important;
     backdrop-filter: blur(4px);
+    width: auto !important; /* Убираем 100vw, чтобы панель была компактной */
 }
 
-/* Аккуратные, узкие кнопки действий */
+/* Компактные и узкие кнопки */
 .btn-action {
     background: #2c3e50;
     color: #ffffff;
     border: none;
-    padding: 6px 20px;
-    font-size: 13px;
+    padding: 5px 16px; /* Чуть уменьшили вертикальный отступ */
+    font-size: 12px;
     font-weight: 700;
-    border-radius: 20px;
+    border-radius: 15px;
     cursor: pointer;
     transition: all 0.2s ease;
     text-transform: uppercase;
@@ -57,12 +61,12 @@ html, body {
 /* Состояния кнопок */
 .btn-fire-active { 
     background: #ff4757; 
-    box-shadow: 0 0 12px rgba(255, 71, 87, 0.6); 
+    box-shadow: 0 0 10px rgba(255, 71, 87, 0.5); 
 }
 
 .btn-move-active { 
     background: #1e90ff; 
-    box-shadow: 0 0 12px rgba(30, 144, 255, 0.6); 
+    box-shadow: 0 0 10px rgba(30, 144, 255, 0.5); 
 }
 
 .btn-inactive { 
@@ -74,27 +78,28 @@ html, body {
     opacity: 0.95;
 }
 
-/* Лаконичный таймер секунд (сбоку от кнопок) */
+/* Секундомер — теперь он будет аккуратно стоять справа от кнопки MOVE */
 #timer-text {
     color: #ff4757;
     font-weight: 700;
-    font-size: 16px;
+    font-size: 15px;
     font-family: 'Courier New', Courier, monospace;
-    min-width: 50px;
+    min-width: 45px;
     text-align: center;
     background: rgba(255, 255, 255, 0.1);
-    padding: 4px 10px;
-    border-radius: 12px;
+    padding: 3px 8px;
+    border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.05);
+    margin-left: 5px; /* Небольшой отступ от кнопки MOVE */
 }
 
-/* Статус-текст для ожидания соперника или его хода */
+/* Статус-текст для ожидания хода соперника */
 #status-text {
     position: absolute;
-    top: 75px;
+    top: 55px; /* Опустили чуть ниже кромки панели */
     left: 50%;
     transform: translateX(-50%);
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 800;
     text-align: center;
     letter-spacing: 1px;
@@ -115,10 +120,9 @@ html, body {
     overflow: hidden;
     pointer-events: none;
     z-index: 50;
-    display: none; /* Управляется из JS */
+    display: none;
 }
 
-/* Зелёное наполнение здоровья */
 .hp-bar .fill {
     height: 100%;
     width: 100%;
