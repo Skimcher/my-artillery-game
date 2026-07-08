@@ -23,7 +23,6 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(41, 1, 0.1, 1000);
 
 function adjustCamera() {
-    // Берем размеры строго родительского контейнера, а не window
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
     const aspect = width / height;
@@ -31,13 +30,18 @@ function adjustCamera() {
     camera.aspect = aspect;
 
     if (aspect < 1) {
-        // СМАРТФОНЫ И ВЕРТИКАЛЬНЫЕ ЭКРАНЫ
+        // СМАРТФОНЫ И ВЕРТИКАЛЬНЫЕ ЭКРАНЫ (Особенно внутри фрейма itch.io)
         const multiplier = 1 / aspect; 
-        const dynamicY = 38.0 * multiplier;
-        const dynamicZ = 33.0 * multiplier;
         
-        camera.position.set(0, Math.min(dynamicY, 56), Math.min(dynamicZ, 50));
-        camera.lookAt(0, -4.5, 2.0);
+        // Немного увеличили базовые значения, чтобы камера дальше отходила на узких экранах
+        const dynamicY = 40.0 * multiplier;
+        const dynamicZ = 34.5 * multiplier;
+        
+        // Подняли планку ограничений (было 56 и 50 -> стало 68 и 62)
+        camera.position.set(0, Math.min(dynamicY, 68), Math.min(dynamicZ, 62));
+        
+        // Сместили фокус камеры по оси Z (было 2.0 -> стало 4.0), чтобы поднять нижний край поля повыше
+        camera.lookAt(0, -4.5, 4.0);
     } else {
         // ПК И ПЛАНШЕТЫ (Широкий экран)
         camera.position.set(0, 51.0, 44.5);
@@ -48,7 +52,6 @@ function adjustCamera() {
 }
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-// Инициализируем рендерер по размерам контейнера
 const initialWidth = container.clientWidth || window.innerWidth;
 const initialHeight = container.clientHeight || window.innerHeight;
 renderer.setSize(initialWidth, initialHeight);
@@ -56,7 +59,6 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 container.appendChild(renderer.domElement);
 
-// Корректируем камеру после того, как рендерер добавил свой элемент
 adjustCamera();
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.85));
@@ -300,7 +302,6 @@ window.addEventListener('pointerdown', (e) => {
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
-    // Считаем координаты клика относительно контейнера игры, а не всего экрана
     const rect = renderer.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
         ((e.clientX - rect.left) / width) * 2 - 1,
