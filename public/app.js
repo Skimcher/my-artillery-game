@@ -60,7 +60,7 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// ИСПРАВЛЕНО ДЛЯ ПК: Сдвигаем наклон камеры так, чтобы снизу гарантированно оставался зазор с травой
+// ИСПРАВЛЕНО: Балансируем камеру, чтобы поля умещались между кнопками и нижним краем
 function updateCameraPosition() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -73,17 +73,17 @@ function updateCameraPosition() {
         camera.position.set(0, 42, 38); 
         camera.lookAt(0, -2, -5); 
     } else {
-        // --- ПК ВЕРСИЯ (Chrome, Opera, Mozilla, Edge и др.) ---
+        // --- ПК ВЕРСИЯ ---
         camera.fov = BASE_FOV;
         camera.updateProjectionMatrix();
         
-        // Установили оптимальную высоту (51.0) и расстояние (44.5)
-        camera.position.set(0, 51.0, 44.5); 
+        // Немного отодвинули назад по Z (47.5) и приподняли (54.5)
+        // Это делает поля чуть компактнее на экране, освобождая место сверху и снизу
+        camera.position.set(0, 54.5, 47.5); 
         
-        // Изменили lookAt на (0, -2, 3.2). За счет смещения фокуса вперед по оси Z, 
-        // камера наклоняется чуть сильнее вниз. Это заставляет всю игровую сцену 
-        // уйти выше, аккуратно оголяя полосу бэкграунда под нижним боевым полем.
-        camera.lookAt(0, -2, 3.2); 
+        // Фокус lookAt скорректирован так, чтобы поля центрировались идеально: 
+        // Снизу виден фон травы, а сверху поля больше не залезают под кнопки
+        camera.lookAt(0, -2, 2.5); 
     }
 }
 updateCameraPosition();
@@ -412,7 +412,7 @@ controls.appendChild(btnMove);
 
 const styleUI = () => {
     uiContainer.style.position = 'absolute';
-    uiContainer.style.top = '15px';
+    uiContainer.style.top = '10px'; // Чуть прижали к верху, чтобы дать место сцене
     uiContainer.style.left = '50%';
     uiContainer.style.transform = 'translateX(-50%)';
     uiContainer.style.display = 'flex';
@@ -433,22 +433,22 @@ const styleUI = () => {
     timerBlock.style.fontWeight = 'bold';
     timerBlock.style.color = '#ffffff';
     timerBlock.style.textShadow = '2px 2px 4px #000000';
-    timerBlock.style.margin = '5px 0 10px 0';
+    timerBlock.style.margin = '2px 0 6px 0';
     timerBlock.style.pointerEvents = 'auto';
 
     controls.style.position = 'static';
     controls.style.transform = 'none';
-    controls.style.gap = '15px';
+    controls.style.gap = '12px';
     controls.style.pointerEvents = 'auto';
 
     [btnFire, btnMove].forEach(btn => {
         btn.style.fontWeight = 'bold';
         btn.style.cursor = 'pointer';
         btn.style.color = '#ffffff';
-        btn.style.borderRadius = '6px';
+        btn.style.borderRadius = '5px';
         btn.style.border = '2px solid #555555';
         btn.style.transition = 'all 0.1s ease';
-        btn.style.boxShadow = '0px 4px 6px rgba(0,0,0,0.4)';
+        btn.style.boxShadow = '0px 3px 5px rgba(0,0,0,0.4)';
     });
 };
 styleUI();
@@ -467,16 +467,18 @@ function updateButtonVisuals() {
     }
 }
 
+// ИСПРАВЛЕНО: Уменьшены размеры кнопок для ПК версии, чтобы не налезали на поля
 function applyMobileLayout() {
     const isMobile = window.innerWidth <= 768;
     
-    turnIndicator.style.fontSize = isMobile ? '16px' : '32px';
-    timerBlock.style.fontSize = isMobile ? '13px' : '26px';
+    turnIndicator.style.fontSize = isMobile ? '16px' : '26px'; // Слегка уменьшили титры на ПК
+    timerBlock.style.fontSize = isMobile ? '13px' : '20px';
 
     controls.style.flexDirection = 'row';
     [btnFire, btnMove].forEach(btn => {
-        btn.style.padding = isMobile ? '8px 18px' : '12px 24px';
-        btn.style.fontSize = isMobile ? '14px' : '16px';
+        // На ПК кнопки теперь компактные (padding 8px 18px вместо 12px 24px) и не мешают обзору
+        btn.style.padding = isMobile ? '8px 18px' : '8px 18px';
+        btn.style.fontSize = isMobile ? '14px' : '14px';
     });
 
     const isMyTurn = gameState && gameState.turn === myId;
@@ -561,157 +563,4 @@ window.addEventListener('click', (event) => {
         } 
         else if (currentMode === 'move') {
             if (selectedUnitId && clickedPlaneRole === myRole) {
-                const unitIndex = parseInt(selectedUnitId.split('_')[1]);
-                
-                hasDoneActionThisTurn = true; 
-                controls.style.setProperty('display', 'none', 'important');
-                updateSelectionRing(null); 
-                
-                socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: unitIndex, forcedRole: myRole });
-                selectedUnitId = null;
-            }
-        }
-    }
-});
-
-// --- NETWORK ---
-socket.emit('joinGame');
-socket.on('waiting', () => { 
-    turnIndicator.innerText = "WAITING FOR OPPONENT..."; 
-    turnIndicator.style.color = "#ffa500";
-    applyMobileLayout(); 
-});
-socket.on('gameStart', (data) => { 
-    myRole = data.role; 
-    myId = socket.id; 
-    gameState = data.state; 
-    updateTurnUI(); 
-    renderUnits(); 
-});
-socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
-socket.on('turnChanged', (data) => { 
-    gameState = data.state || gameState; 
-    gameState.turn = data.turn; 
-    timerDisplay.innerText = data.timer; 
-    hasDoneActionThisTurn = false; 
-    selectedUnitId = null;
-    updateSelectionRing(null);
-    updateTurnUI(); 
-});
-socket.on('gameStateUpdate', (newState) => { gameState = newState; renderUnits(); });
-
-socket.on('fireResult', (data) => {
-    createSplash(data.x, data.y, data.targetRole, data.result);
-
-    const offsetZ = (data.targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
-    const worldX = data.x - (FIELD_SIZE / 2);
-    const worldZ = data.y - (FIELD_SIZE / 2) + offsetZ;
-
-    const explosionGroup = new THREE.Group();
-    explosionGroup.position.set(worldX, 0.07, worldZ);
-    scene.add(explosionGroup);
-
-    const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32);
-    directGeo.rotateX(-Math.PI / 2);
-    const directMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
-    const directMesh = new THREE.Mesh(directGeo, directMat);
-    explosionGroup.add(directMesh);
-
-    const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32);
-    splashGeo.rotateX(-Math.PI / 2);
-    const splashMat = new THREE.MeshBasicMaterial({ color: 0x888888, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
-    const splashMesh = new THREE.Mesh(splashGeo, splashMat);
-    splashMesh.position.y = -0.01; 
-    explosionGroup.add(splashMesh);
-
-    setTimeout(() => {
-        scene.remove(explosionGroup);
-        directGeo.dispose(); directMat.dispose();
-        splashGeo.dispose(); splashMat.dispose();
-    }, 2000);
-});
-
-socket.on('gameOver', (data) => { 
-    document.querySelectorAll('.hp-bar-container').forEach(el => el.remove());
-    alert(data.winner === myId ? "VICTORY!" : "DEFEAT!"); 
-    window.location.reload(); 
-});
-
-function updateTurnUI() {
-    if (!gameState) return;
-
-    if (gameState.turn === myId) {
-        turnIndicator.innerText = "YOUR TURN!"; 
-        turnIndicator.style.color = "#2ed573";
-        if (!hasDoneActionThisTurn) { 
-            currentMode = 'fire'; 
-        }
-    } else {
-        turnIndicator.innerText = "OPPONENT'S TURN..."; 
-        turnIndicator.style.color = "#ff4757"; 
-    }
-    applyMobileLayout();
-}
-
-function renderUnits() {
-    const activeIdBeforeRender = selectedUnitId;
-
-    Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
-    burningUnitsPositions.length = 0; 
-    
-    if (!gameState || !gameState.players) return;
-
-    const p1 = gameState.players.p1; const p2 = gameState.players.p2;
-
-    if (p1 && p1.units) {
-        p1.units.forEach((unit, index) => {
-            if (unit.x === -1000 || unit.y === -1000) {
-                const el = document.getElementById(`hp-container-p1_${index}`);
-                if (el) el.style.display = 'none';
-                return;
-            }
-            createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1', unit.hp);
-            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) + FIELD_OFFSET_Z });
-        });
-    }
-    if (p2 && p2.units) {
-        p2.units.forEach((unit, index) => {
-            if (unit.x === -1000 || unit.y === -1000) {
-                const el = document.getElementById(`hp-container-p2_${index}`);
-                if (el) el.style.display = 'none';
-                return;
-            }
-            createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
-            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) - FIELD_OFFSET_Z });
-        });
-    }
-
-    if (activeIdBeforeRender && visualUnits[activeIdBeforeRender]) {
-        selectedUnitId = activeIdBeforeRender;
-        updateSelectionRing(visualUnits[selectedUnitId]);
-    }
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-    spawnFireAndSmoke();
-    updateHpBarsPositions();
-
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.mesh.position.x += p.vX; p.mesh.position.y += p.vY; p.mesh.position.z += p.vZ;
-        p.vY -= 0.005; p.life--;
-        if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
-    }
-    renderer.render(scene, camera);
-}
-animate();
-
-window.addEventListener('resize', () => {
-    updateCameraPosition();
-    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    applyMobileLayout(); 
-});
-
-setTimeout(applyMobileLayout, 100);
+                const unitIndex = parseInt(selectedUnitId.split('_')
