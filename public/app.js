@@ -1,6 +1,6 @@
 // --- ИНИЦИАЛИЗАЦИЯ СОКЕТОВ С ИСПРАВЛЕНИЕМ ДЛЯ ITCH.IO ---
 const socket = io('https://artillery-game2.onrender.com', {
-    transports: ['websocket', 'polling'], // Добавлен polling для обхода блокировок фрейма
+    transports: ['websocket', 'polling'],
     withCredentials: true,
     upgrade: true,
     forceNew: true
@@ -51,7 +51,7 @@ const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.
 function updateCameraPosition() {
     const aspect = window.innerWidth / window.innerHeight;
     if (aspect < 1) {
-        camera.fov = BASE_FOV / aspect * 0.85; 
+        camera.fov = (BASE_FOV / aspect) * 0.85; 
         camera.updateProjectionMatrix();
         camera.position.set(0, 42, 38); 
         camera.lookAt(0, -2, -5); 
@@ -94,7 +94,6 @@ function createBattlefields() {
     
     scene.add(visualField1, visualField2);
 
-    // Outlines
     const geometry = new THREE.BufferGeometry();
     const half = FIELD_SIZE / 2;
     const vertices = [
@@ -112,7 +111,6 @@ function createBattlefields() {
     outline2.position.set(0, 0.06, -FIELD_OFFSET_Z);
     scene.add(outline1, outline2);
 
-    // Interactive Planes for Raycasting
     const clickGeo = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE);
     clickGeo.rotateX(-Math.PI / 2);
     const clickMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -256,8 +254,8 @@ function updateHpBarsPositions() {
             tempV.y += 3.5; 
             tempV.project(camera);
             
-            const x = (tempV.x * .5 + .5) * window.innerWidth;
-            const y = (tempV.y * -.5 + .5) * window.innerHeight;
+            const x = (tempV.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (tempV.y * -0.5 + 0.5) * window.innerHeight;
             domEl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
         }
     });
@@ -386,7 +384,6 @@ socket.on('gameStart', (data) => {
     myId = socket.id; 
     gameState = data.state; 
     
-    // Обе платформы всегда остаются видимыми
     if (visualField1) visualField1.visible = true;
     if (outline1) outline1.visible = true;
     if (visualField2) visualField2.visible = true;
@@ -480,7 +477,7 @@ function renderUnits() {
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
             if (unit.x === -1000 || unit.y === -1000) return;
-            if (myRole === 'p2' && !unit.destroyed) return; // Туман войны для P2
+            if (myRole === 'p2' && !unit.destroyed) return;
 
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1', unit.hp);
             if (unit.destroyed) {
@@ -495,7 +492,7 @@ function renderUnits() {
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
             if (unit.x === -1000 || unit.y === -1000) return;
-            if (myRole === 'p1' && !unit.destroyed) return; // Туман войны для P1
+            if (myRole === 'p1' && !unit.destroyed) return;
 
             createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
             if (unit.destroyed) {
