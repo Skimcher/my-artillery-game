@@ -1,2 +1,112 @@
-body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
-#canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
+/* Обнуление отступов и фиксация экрана от скролла */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: fixed;
+    background-color: #000;
+    font-family: sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Контейнер для 3D сцены Three.js */
+#canvas-container {
+    width: 100vw;
+    height: 100vh;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+/* Главный контейнер интерфейса сверху экрана */
+.ui-container {
+    position: absolute;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    pointer-events: none;
+    z-index: 99;
+    text-align: center;
+}
+
+/* Текст статуса (YOUR TURN / OPPONENT'S TURN) */
+.status-info {
+    font-size: 24px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 2px 2px 4px #000;
+    margin-bottom: 5px;
+}
+
+/* Текст таймера */
+.timer-info {
+    font-size: 18px;
+    color: #fff;
+    text-shadow: 1px 1px 3px #000;
+    margin-bottom: 15px;
+}
+
+/* Контейнер для игровых кнопок */
+.controls-container {
+    display: none; /* Включается из JS, когда наступает ваш ход */
+    gap: 15px;
+    pointer-events: auto;
+}
+
+/* Общие стили для кнопок */
+.btn-action {
+    padding: 12px 30px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #fff;
+    border-radius: 6px;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+/* Кнопка FIRE в активном состоянии */
+.btn-fire-active {
+    background: #2ed573;
+    border: 2px solid #fff;
+}
+
+/* Кнопка MOVE в активном состоянии */
+.btn-move-active {
+    background: #1e90ff;
+    border: 2px solid #fff;
+}
+
+/* Кнопка в пассивном (не выбранном) состоянии */
+.btn-inactive {
+    background: #333;
+    border: 2px solid #555;
+}
+
+/* Шкалы здоровья над САУ (позиционируются динамически через JS) */
+.hp-bar {
+    position: absolute;
+    width: 45px;
+    height: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid #fff;
+    pointer-events: none;
+    z-index: 10;
+    border-radius: 2px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.hp-bar .fill {
+    height: 100%;
+    background: #2ed573;
+    width: 100%;
+    transition: width 0.3s ease-out;
+}
