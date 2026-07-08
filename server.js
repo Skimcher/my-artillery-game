@@ -10,11 +10,13 @@ app.use(express.static('public'));
 
 let rooms = {};
 let waitingPlayer = null;
+let waitingTimeout = null;
 
 const FIELD_SIZE = 25;
-const UNIT_RADIUS = 1.5; // Модель 3м, радиус 1.5м
-const DIRECT_RADIUS = 1.25; // Диаметр 2.5м -> радиус 1.25м
-const SPLASH_RADIUS = 4.13; // Радиус осколков
+const UNIT_RADIUS = 1.5;     // Модель 3м -> радиус 1.5м
+const DIRECT_RADIUS = 1.25;  // Диаметр 2.5м -> радиус 1.25м (критическое попадание)
+const SPLASH_RADIUS = 4.0;   // Новое значение: 4 метра радиус осколков
+const TURN_TIME = 9;         // Новое значение: 9 секунд на ход
 
 function generateUnits() {
     const min = UNIT_RADIUS;
@@ -37,7 +39,16 @@ io.on('connection', (socket) => {
     if (!waitingPlayer) {
         waitingPlayer = socket;
         socket.emit('waiting');
+        
+        // Ожидание оппонента 300 секунд
+        waitingTimeout = setTimeout(() => {
+            if (waitingPlayer && waitingPlayer.id === socket.id) {
+                waitingPlayer.emit('gameOver', { winner: 'timeout_no_opponent' });
+                waitingPlayer = null;
+            }
+        }, 300000); // 300 секунд
     } else {
+        clearTimeout(waitingTimeout);
         const roomId = `room_${waitingPlayer.id}_${socket.id}`;
         const p1 = waitingPlayer;
         const p2 = socket;
@@ -53,7 +64,7 @@ io.on('connection', (socket) => {
                 p2: { id: p2.id, units: generateUnits() }
             },
             turn: p1.id,
-            timer: 30,
+            timer: TURN_TIME,
             interval: null
         };
 
@@ -74,7 +85,6 @@ io.on('connection', (socket) => {
         const opponentRole = myRole === 'p1' ? 'p2' : 'p1';
 
         if (data.type === 'fire') {
-            // Координаты приходят в метрах (0..25) относительно поля противника
             const targetUnits = room.players[opponentRole].units;
             
             io.to(roomId).emit('fireResult', {
@@ -101,7 +111,6 @@ io.on('connection', (socket) => {
         else if (data.type === 'move') {
             const unit = room.players[myRole].units[data.unitIndex];
             if (unit && !unit.destroyed) {
-                // Ограничиваем перемещение границами поля
                 unit.x = Math.max(UNIT_RADIUS, Math.min(FIELD_SIZE - UNIT_RADIUS, data.x));
                 unit.y = Math.max(UNIT_RADIUS, Math.min(FIELD_SIZE - UNIT_RADIUS, data.y));
             }
@@ -113,6 +122,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
         if (waitingPlayer && waitingPlayer.id === socket.id) {
+            clearTimeout(waitingTimeout);
             waitingPlayer = null;
             return;
         }
@@ -129,7 +139,7 @@ function switchTurn(roomId) {
     const room = rooms[roomId];
     if (!room) return;
     room.turn = room.turn === room.players.p1.id ? room.players.p2.id : room.players.p1.id;
-    room.timer = 30;
+    room.timer = TURN_TIME;
     
     sendStateUpdate(roomId);
 }
