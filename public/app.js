@@ -201,7 +201,6 @@ function renderUnits() {
 }
 
 window.addEventListener('pointerdown', (e) => {
-    // Проверяем возможность действия по роли
     if (e.target.tagName === 'BUTTON' || !gameState || gameState.turn !== myRole || hasDoneActionThisTurn) return;
 
     const raycaster = new THREE.Raycaster();
@@ -254,7 +253,15 @@ window.addEventListener('pointerdown', (e) => {
 socket.on('waiting', () => { info.innerText = 'WAITING FOR OPPONENT...'; info.style.color = '#ff9f43'; });
 socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
 socket.on('timerUpdate', (t) => { timerEl.innerText = `TIME: ${t}`; });
-socket.on('turnChanged', (data) => { gameState = data.state; hasDoneActionThisTurn = false; updateTurnUI(); renderUnits(); });
+
+socket.on('turnChanged', (data) => { 
+    gameState = data.state; 
+    hasDoneActionThisTurn = false; 
+    timerEl.innerText = `TIME: ${data.timer}`; // Принудительно ставим стартовые 9 секунд
+    updateTurnUI(); 
+    renderUnits(); 
+});
+
 socket.on('gameStateUpdate', (state) => { gameState = state; renderUnits(); });
 
 socket.on('fireResult', (data) => {
@@ -289,7 +296,6 @@ socket.on('gameOver', (data) => {
 });
 
 function updateTurnUI() {
-    // Проверяем ход на равенство роли ('p1' или 'p2')
     if (gameState.turn === myRole) {
         info.innerText = 'YOUR TURN!'; info.style.color = '#2ed573';
         controls.style.display = 'flex';
