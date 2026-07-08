@@ -20,17 +20,17 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // --- GAME CONFIGURATION ---
 const FIELD_SIZE = 25;
-const TURN_TIME_LIMIT = 30; // Секунд на ход
+const TURN_TIME_LIMIT = 9; // ИСПРАВЛЕНО: 9 секунд на ход вместо 30
 const MATCHMAKING_TIMEOUT = 300; // 5 минут ожидания оппонента
 
 let waitingPlayer = null;
 const activeGames = {}; 
 
+// ИСПРАВЛЕНО: Теперь генерируются 2 САУ вместо 3 для каждого игрока
 function createInitialUnits() {
     return [
-        { x: 5,  y: 5,  hp: 100, destroyed: false },
-        { x: 12, y: 5,  hp: 100, destroyed: false },
-        { x: 20, y: 5,  hp: 100, destroyed: false }
+        { x: 7,  y: 5,  hp: 100, destroyed: false }, // Первая САУ
+        { x: 18, y: 5,  hp: 100, destroyed: false }  // Вторая САУ
     ];
 }
 
@@ -116,7 +116,6 @@ io.on('connection', (socket) => {
         const opponentRole = (currentRole === 'p1') ? 'p2' : 'p1';
 
         if (action.type === 'fire') {
-            // Проверка координат внутри границ поля
             if (action.x < 0 || action.x > FIELD_SIZE || action.y < 0 || action.y > FIELD_SIZE) return;
 
             let hitType = 'miss';
@@ -218,7 +217,6 @@ function switchTurn(gameId) {
     const game = activeGames[gameId];
     if (!game) return;
 
-    // Меняем id активного игрока местами
     const currentTurnId = game.state.turn;
     const nextTurnId = (currentTurnId === game.p1.id) ? game.p2.id : game.p1.id;
     game.state.turn = nextTurnId;
@@ -243,7 +241,7 @@ function checkWinCondition(gameId) {
         clearInterval(game.timerInterval);
         let winnerId = null;
 
-        if (p1AllDead && p2AllDead) winnerId = 'draw'; // Маловероятно, но на случай взаимного уничтожения
+        if (p1AllDead && p2AllDead) winnerId = 'draw';
         else winnerId = p1AllDead ? game.p2.id : game.p1.id;
 
         io.to(gameId).emit('gameOver', { winner: winnerId });
