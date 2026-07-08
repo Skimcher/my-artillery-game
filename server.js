@@ -10,13 +10,14 @@ app.use(express.static('public'));
 
 let rooms = {};
 let waitingPlayer = null;
-let waitingTimeout = null;
+let lobbyInterval = null;
+let lobbyTimer = 300;
 
 const FIELD_SIZE = 25;
-const UNIT_RADIUS = 1.5;     // Модель 3м -> радиус 1.5м
-const DIRECT_RADIUS = 1.25;  // Диаметр 2.5м -> радиус 1.25м (критическое)
-const SPLASH_RADIUS = 4.0;   // Радиус осколков 4м
-const TURN_TIME = 9;         // 9 секунд на ход каждому
+const UNIT_RADIUS = 1.5;     
+const DIRECT_RADIUS = 1.25;  
+const SPLASH_RADIUS = 4.0;   
+const TURN_TIME = 9;         
 
 function generateUnits() {
     const min = UNIT_RADIUS;
@@ -38,16 +39,31 @@ io.on('connection', (socket) => {
 
     if (!waitingPlayer) {
         waitingPlayer = socket;
-        socket.emit('waiting');
+        lobbyTimer = 300; // Сброс таймера до 300 секунд
         
-        waitingTimeout = setTimeout(() => {
-            if (waitingPlayer && waitingPlayer.id === socket.id) {
-                waitingPlayer.emit('gameOver', { winner: 'timeout_no_opponent' });
-                waitingPlayer = null;
+        // Отправляем первое состояние ожидания
+        socket.emit('waiting', lobbyTimer);
+        
+        // Запускаем ежесекундный отсчет для лобби
+        lobbyInterval = setInterval(() => {
+            lobbyTimer--;
+            if (waitingPlayer) {
+                waitingPlayer.emit('lobbyTimerUpdate', lobbyTimer);
             }
-        }, 300000); // 300 секунд ожидания в лобби
+            
+            if (lobbyTimer <= 0) {
+                clearInterval(lobbyInterval);
+                if (waitingPlayer) {
+                    waitingPlayer.emit('gameOver', { winner: 'timeout_no_opponent' });
+                    waitingPlayer = null;
+                }
+            }
+        }, 1000);
+
     } else {
-        clearTimeout(waitingTimeout);
+        // Второй игрок зашел! Останавливаем таймер ожидания лобби
+        clearInterval(lobbyInterval);
+        
         const roomId = `room_${waitingPlayer.id}_${socket.id}`;
         const p1 = waitingPlayer;
         const p2 = socket;
@@ -62,7 +78,7 @@ io.on('connection', (socket) => {
                 p1: { id: p1.id, units: generateUnits() },
                 p2: { id: p2.id, units: generateUnits() }
             },
-            turn: 'p1', // Первым всегда ходит p1
+            turn: 'p1', 
             timer: TURN_TIME,
             interval: null
         };
@@ -80,7 +96,6 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         const myRole = room.players.p1.id === socket.id ? 'p1' : 'p2';
         
-        // Защита: ходить можно только в свой ход
         if (room.turn !== myRole) return;
 
         const opponentRole = myRole === 'p1' ? 'p2' : 'p1';
@@ -131,7 +146,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         if (waitingPlayer && waitingPlayer.id === socket.id) {
-            clearTimeout(waitingTimeout);
+            clearInterval(lobbyInterval);
             waitingPlayer = null;
         }
     });
@@ -141,17 +156,11 @@ function switchTurn(roomId) {
     const room = rooms[roomId];
     if (!room) return;
     
-    // 1. Сначала ОСТАНАВЛИВАЕМ старый таймер текущего игрока
     clearInterval(room.interval);
-    
-    // 2. Меняем активного игрока
     room.turn = room.turn === 'p1' ? 'p2' : 'p1';
     room.timer = TURN_TIME;
     
-    // 3. Отправляем обновленное состояние клиентам
     sendStateUpdate(roomId);
-    
-    // 4. ЗАПУСКАЕМ новый чистый таймер на следующие 9 секунд
     startRoomTimer(roomId);
 }
 
@@ -159,7 +168,6 @@ function startRoomTimer(roomId) {
     const room = rooms[roomId];
     if (!room) return;
 
-    // Первоначальный синхронный показ 9 секунд при старте хода
     io.to(roomId).emit('timerUpdate', room.timer);
 
     room.interval = setInterval(() => {
@@ -172,7 +180,7 @@ function startRoomTimer(roomId) {
         io.to(roomId).emit('timerUpdate', room.timer);
         
         if (room.timer <= 0) {
-            switchTurn(roomId); // Время вышло — ход автоматически переходит следующему
+            switchTurn(roomId); 
         }
     }, 1000);
 }
