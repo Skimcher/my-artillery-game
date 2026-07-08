@@ -85,6 +85,7 @@ const btnFire = document.getElementById('btn-fire');
 const btnMove = document.getElementById('btn-move');
 
 function updateButtonsUI() {
+    if (!btnFire || !btnMove) return;
     if (currentMode === 'fire') {
         btnFire.className = 'btn-action btn-fire-active';
         btnMove.className = 'btn-action btn-inactive';
@@ -94,8 +95,8 @@ function updateButtonsUI() {
     }
 }
 
-btnFire.addEventListener('click', (e) => { e.stopPropagation(); currentMode = 'fire'; removeSelectionRing(); selectedUnitId = null; updateButtonsUI(); });
-btnMove.addEventListener('click', (e) => { e.stopPropagation(); currentMode = 'move'; updateButtonsUI(); autoSelectUnit(); });
+if (btnFire) btnFire.addEventListener('click', (e) => { e.stopPropagation(); currentMode = 'fire'; removeSelectionRing(); selectedUnitId = null; updateButtonsUI(); });
+if (btnMove) btnMove.addEventListener('click', (e) => { e.stopPropagation(); currentMode = 'move'; updateButtonsUI(); autoSelectUnit(); });
 
 function autoSelectUnit() {
     if (!gameState || !myRole) return;
@@ -293,13 +294,16 @@ window.addEventListener('pointerdown', (e) => {
 
         if (currentMode === 'fire' && planeRole !== myRole) {
             hasDoneActionThisTurn = true;
-            controls.style.display = 'none';
+            // Делаем кнопки неактивными, но панель и таймер НЕ СКРЫВАЕМ
+            if (btnFire) btnFire.style.display = 'none';
+            if (btnMove) btnMove.style.display = 'none';
             socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY });
         } 
         else if (currentMode === 'move' && planeRole === myRole && selectedUnitId) {
             const idx = parseInt(selectedUnitId.split('_')[1]);
             hasDoneActionThisTurn = true;
-            controls.style.display = 'none';
+            if (btnFire) btnFire.style.display = 'none';
+            if (btnMove) btnMove.style.display = 'none';
             removeSelectionRing();
             socket.emit('playerAction', { type: 'move', unitIndex: idx, x: serverX, y: serverY });
             selectedUnitId = null;
@@ -307,27 +311,35 @@ window.addEventListener('pointerdown', (e) => {
     }
 });
 
-// Состояние ожидания (лобби)
+// События сокетов для лобби и игры
 socket.on('waiting', (time) => { 
-    info.innerText = 'WAITING FOR OPPONENT...'; 
-    info.style.color = '#ff9f43'; 
-    controls.style.display = 'flex'; // Показываем плашку для таймера лобби
-    btnFire.style.display = 'none';
-    btnMove.style.display = 'none';
-    timerEl.innerText = `${time}s`;
+    if (info) { info.innerText = 'WAITING FOR OPPONENT...'; info.style.color = '#ff9f43'; }
+    if (controls) controls.style.display = 'flex'; 
+    if (btnFire) btnFire.style.display = 'none';
+    if (btnMove) btnMove.style.display = 'none';
+    if (timerEl) { timerEl.style.display = 'block'; timerEl.innerText = `${time}s`; }
 });
 
 socket.on('lobbyTimerUpdate', (time) => {
-    timerEl.innerText = `${time}s`;
+    if (timerEl) { timerEl.style.display = 'block'; timerEl.innerText = `${time}s`; }
 });
 
-socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
-socket.on('timerUpdate', (t) => { timerEl.innerText = `${t}s`; });
+socket.on('gameStart', (data) => { 
+    myRole = data.role; 
+    myId = socket.id; 
+    gameState = data.state; 
+    updateTurnUI(); 
+    renderUnits(); 
+});
+
+socket.on('timerUpdate', (t) => { 
+    if (timerEl) { timerEl.style.display = 'block'; timerEl.innerText = `${t}s`; }
+});
 
 socket.on('turnChanged', (data) => { 
     gameState = data.state; 
     hasDoneActionThisTurn = false; 
-    timerEl.innerText = `${data.timer}s`; 
+    if (timerEl) { timerEl.style.display = 'block'; timerEl.innerText = `${data.timer}s`; }
     updateTurnUI(); 
     renderUnits(); 
 });
@@ -367,21 +379,21 @@ socket.on('gameOver', (data) => {
     window.location.reload();
 });
 
-// Исправленное переключение интерфейса ходов
+// Централизованное и надежное обновление UI
 function updateTurnUI() {
-    controls.style.display = 'flex'; // ВЕРХНЯЯ ПАНЕЛЬ СЕЙЧАС ВСЕГДА КОРРЕКТНО ОТОБРАЖАЕТСЯ
+    if (controls) controls.style.display = 'flex'; 
+    if (timerEl) timerEl.style.display = 'block'; 
 
-    if (gameState.turn === myRole) {
-        info.innerText = ''; // "Your turn" текст скрыт, чтобы не мешать
-        btnFire.style.display = 'block'; // Кнопки видны
-        btnMove.style.display = 'block';
+    if (gameState && gameState.turn === myRole) {
+        if (info) info.innerText = ''; 
+        if (btnFire) btnFire.style.display = 'block'; 
+        if (btnMove) btnMove.style.display = 'block';
         currentMode = 'fire';
         updateButtonsUI();
     } else {
-        info.innerText = "OPPONENT'S TURN..."; 
-        info.style.color = '#ff4757';
-        btnFire.style.display = 'none'; // Скрываем только кнопки, таймер справа ОСТАЕТСЯ!
-        btnMove.style.display = 'none';
+        if (info) { info.innerText = "OPPONENT'S TURN..."; info.style.color = '#ff4757'; }
+        if (btnFire) btnFire.style.display = 'none'; 
+        if (btnMove) btnMove.style.display = 'none';
     }
 }
 
@@ -389,7 +401,6 @@ const clock = new THREE.Clock();
 
 function animate() {
     requestAnimationFrame(animate);
-    
     const delta = clock.getDelta();
 
     for (let i = activeParticles.length - 1; i >= 0; i--) {
