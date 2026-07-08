@@ -1,7 +1,7 @@
-// --- ИНИЦИАЛИЗАЦИЯ ---
+// --- ИНИЦИАЛИЗАЦИЯ СОКЕТОВ ---
 const socket = io('https://artillery-game2.onrender.com', { transports: ['websocket'] });
 
-// --- СЦЕНА THREE.JS ---
+// --- ИНИЦИАЛИЗАЦИЯ THREE.JS ---
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -12,13 +12,19 @@ camera.lookAt(0, 0, 0);
 
 // --- ЛОГИКА ---
 socket.on('connect', () => {
-    console.log("Соединение установлено, запрашиваем игру...");
+    console.log("Соединение установлено!");
     socket.emit('joinGame');
 });
 
-// Слушаем обновление состояния
 socket.on('gameStart', (data) => {
-    console.log("Игра началась:", data);
+    console.log("ПОЛУЧЕН GAME START, запускаю рендеринг:", data);
+    
+    // ПРИНУДИТЕЛЬНАЯ ОЧИСТКА ЭКРАНА
+    // Убираем всё содержимое body, чтобы исчезла надпись CONNECTING...
+    document.body.innerHTML = ''; 
+    document.body.appendChild(renderer.domElement);
+    
+    // Рисуем игру
     renderGame(data.state);
 });
 
@@ -26,12 +32,12 @@ socket.on('gameStateUpdate', (state) => {
     renderGame(state);
 });
 
-// ФУНКЦИЯ ОТРИСОВКИ (Очищает сцену и рисует заново)
+// ФУНКЦИЯ ОТРИСОВКИ
 function renderGame(state) {
-    // 1. Удаляем старые объекты (кубики)
+    // Удаляем старые объекты (кубики)
     scene.children.filter(obj => obj.type === 'Mesh').forEach(obj => scene.remove(obj));
-
-    // 2. Рисуем юнитов
+    
+    // Рисуем юнитов из state
     if (state && state.players) {
         Object.keys(state.players).forEach(role => {
             state.players[role].units.forEach(unit => {
@@ -46,7 +52,7 @@ function renderGame(state) {
     }
 }
 
-// --- ЦИКЛ ---
+// ЦИКЛ АНИМАЦИИ
 function animate() {
     requestAnimationFrame(animate);
     renderer.render(scene, camera);
