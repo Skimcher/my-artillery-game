@@ -12,8 +12,8 @@ let sauModelTemplate = null;
 
 const FIELD_SIZE = 25;
 const FIELD_OFFSET_Z = 13.5; 
-const DIRECT_RADIUS = 1.25;  // Диаметр 2.5м -> радиус 1.25м
-const SPLASH_RADIUS = 4.0;   // Новое значение: 4.0 метра
+const DIRECT_RADIUS = 1.25;  
+const SPLASH_RADIUS = 4.0;   
 
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
@@ -72,7 +72,7 @@ gltfLoader.load('models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
     const size = new THREE.Vector3(); box.getSize(size);
-    const scale = 3.0 / Math.max(size.x, size.y, size.z); // Ровно 3 метра модель САУ
+    const scale = 3.0 / Math.max(size.x, size.y, size.z); 
     sauModelTemplate.scale.set(scale, scale, scale);
     if (gameState) renderUnits();
 });
@@ -201,7 +201,8 @@ function renderUnits() {
 }
 
 window.addEventListener('pointerdown', (e) => {
-    if (e.target.tagName === 'BUTTON' || !gameState || gameState.turn !== myId || hasDoneActionThisTurn) return;
+    // Проверяем возможность действия по роли
+    if (e.target.tagName === 'BUTTON' || !gameState || gameState.turn !== myRole || hasDoneActionThisTurn) return;
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
@@ -261,21 +262,18 @@ socket.on('fireResult', (data) => {
     const wX = data.x - (FIELD_SIZE / 2);
     const wZ = data.y - (FIELD_SIZE / 2) + offsetZ;
 
-    // Круг осколков: Серый, 70% непрозрачности (0.7 opacity)
     const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32).rotateX(-Math.PI / 2);
     const splashMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
     const splashMesh = new THREE.Mesh(splashGeo, splashMat);
     splashMesh.position.set(wX, 0.02, wZ);
     scene.add(splashMesh);
 
-    // Круг прямого попадания: Черный, 90% непрозрачности (0.9 opacity)
     const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32).rotateX(-Math.PI / 2);
     const directMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     const directMesh = new THREE.Mesh(directGeo, directMat);
     directMesh.position.set(wX, 0.03, wZ);
     scene.add(directMesh);
 
-    // Новое изменение: оба круга исчезают строго через 2 секунды
     setTimeout(() => {
         scene.remove(splashMesh);
         scene.remove(directMesh);
@@ -286,12 +284,13 @@ socket.on('gameOver', (data) => {
     document.querySelectorAll('.hp-bar').forEach(el => el.remove());
     if (data.winner === 'timeout_no_opponent') alert('Lobby closed: No opponent connected within 300 seconds.');
     else if (data.winner === 'opponent_disconnected') alert('Opponent disconnected. You win!');
-    else alert(data.winner === myId ? 'VICTORY!' : 'DEFEAT!');
+    else alert(data.winnerRole === myRole ? 'VICTORY!' : 'DEFEAT!');
     window.location.reload();
 });
 
 function updateTurnUI() {
-    if (gameState.turn === myId) {
+    // Проверяем ход на равенство роли ('p1' или 'p2')
+    if (gameState.turn === myRole) {
         info.innerText = 'YOUR TURN!'; info.style.color = '#2ed573';
         controls.style.display = 'flex';
         currentMode = 'fire';
