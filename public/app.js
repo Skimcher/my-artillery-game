@@ -60,7 +60,7 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// ИСПРАВЛЕНО ДЛЯ ПК: Поднимаем поле, оголяя бэкграунд снизу, и уводим его из-под кнопок во всех браузерах
+// ИСПРАВЛЕНО ДЛЯ ПК: Поднимаем всю сцену выше, освобождая нижний край для бэкграунда во всех браузерах
 function updateCameraPosition() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -76,11 +76,12 @@ function updateCameraPosition() {
         // --- ПК ВЕРСИЯ (Подходит для Chrome, Opera, Mozilla, Edge и др.) ---
         camera.fov = BASE_FOV;
         camera.updateProjectionMatrix();
-        // Сместили камеру чуть выше (47.5) и назад (44.5)
-        camera.position.set(0, 47.5, 44.5); 
-        // Фокусируем взгляд чуть ниже геометрического центра (-3.8), благодаря чему верхнее поле уходит из-под кнопок, 
-        // а под нижним полем образуется идеальная свободная полоса бэкграунда
-        camera.lookAt(0, -2, -3.8); 
+        // Подняли камеру чуть выше по Y (49.5) и сместили по Z (45.5)
+        camera.position.set(0, 49.5, 45.5); 
+        // Изменили точку фокуса lookAt по Z с -3.8 на -1.5. 
+        // Благодаря этому камера наклоняется чуть ниже, поднимая боевые поля вверх на экране.
+        // Теперь снизу гарантированно виден красивый зазор бэкграунда, а поля не залезают под кнопки сверху.
+        camera.lookAt(0, -2, -1.5); 
     }
 }
 updateCameraPosition();
@@ -336,6 +337,7 @@ function updateHpBarsPositions() {
     });
 }
 
+// --- СПЛЭШ ЭФФЕКТЫ ---
 function createSplash(serverX, serverY, targetRole, type) {
     const color = 0x5c4033; 
     const particleCount = 25;
@@ -500,8 +502,6 @@ btnMove.addEventListener('click', (e) => {
     if (hasDoneActionThisTurn) return; 
     currentMode = 'move'; 
     updateButtonVisuals();
-    
-    // Подсвечиваем случайную САУ
     selectRandomAliveUnit();
 });
 
@@ -530,7 +530,6 @@ window.addEventListener('click', (event) => {
             currentObj = currentObj.parent;
         }
 
-        // Если кликнули по своей САУ в режиме MOVE — меняем выбор вместо перемещения
         if (currentMode === 'move' && foundId && foundId.startsWith(myRole)) {
             const unitIndex = parseInt(foundId.split('_')[1]);
             const targetUnit = gameState.players[myRole].units[unitIndex];
@@ -652,7 +651,6 @@ function updateTurnUI() {
         turnIndicator.innerText = "OPPONENT'S TURN..."; 
         turnIndicator.style.color = "#ff4757"; 
     }
-    
     applyMobileLayout();
 }
 
@@ -717,5 +715,4 @@ window.addEventListener('resize', () => {
     applyMobileLayout(); 
 });
 
-// Первичная инициализация интерфейса при загрузке страницы
 setTimeout(applyMobileLayout, 100);
