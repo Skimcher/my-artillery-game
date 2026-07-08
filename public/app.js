@@ -6,6 +6,44 @@ const socket = io('https://artillery-game2.onrender.com', {
     forceNew: true
 });
 
+// --- АВТОМАТИЧЕСКОЕ ДОБАВЛЕНИЕ СТИЛЕЙ ДЛЯ HP БАРОВ ---
+// Внедряем CSS прямо в документ, чтобы itch.io не блокировал внешние стили
+const hpStyles = document.createElement('style');
+hpStyles.innerHTML = `
+    .hp-bar-container {
+        position: absolute;
+        z-index: 9999;
+        width: 60px;
+        height: 8px;
+        background-color: rgba(0, 0, 0, 0.6);
+        border: 1px solid #fff;
+        border-radius: 4px;
+        padding: 1px;
+        pointer-events: none;
+        display: none;
+        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    }
+    .hp-bar-fill {
+        height: 100%;
+        background-color: #2ed573;
+        border-radius: 2px;
+        transition: width 0.2s ease;
+    }
+    .hp-bar-text {
+        position: absolute;
+        width: 100%;
+        top: -14px;
+        left: 0;
+        text-align: center;
+        font-family: Arial, sans-serif;
+        font-size: 10px;
+        font-weight: bold;
+        color: #ffffff;
+        text-shadow: 1px 1px 2px #000, -1px -1px 2px #000;
+    }
+`;
+document.head.appendChild(hpStyles);
+
 // --- GAME STATE ---
 let myRole = null;          
 let myId = null;            
@@ -40,7 +78,7 @@ const container = document.getElementById('canvas-container') || document.body;
 const scene = new THREE.Scene();
 
 const textureLoader = new THREE.TextureLoader();
-// ИСПРАВЛЕНО: Абсолютный путь для заднего фона
+// Абсолютный путь для заднего фона
 textureLoader.load('https://artillery-game2.onrender.com/assets/background.jpg', (bgTexture) => {
     scene.background = bgTexture;
 });
@@ -80,7 +118,7 @@ let fieldClickPlanes = [];
 let visualField1, visualField2;
 let outline1, outline2;
 
-// ИСПРАВЛЕНО: Абсолютный путь для текстуры земли
+// Абсолютный путь для текстуры земли
 const battlefieldTexture = textureLoader.load('https://artillery-game2.onrender.com/assets/battlefield.jpg');
 
 function createBattlefields() {
@@ -128,7 +166,8 @@ function createBattlefields() {
 createBattlefields();
 
 // --- MODEL LOADING ---
-gltfLoader.load('/models/sau.glb', (gltf) => {
+// Абсолютный путь к 3D-модели
+gltfLoader.load('https://artillery-game2.onrender.com/models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
     const size = new THREE.Vector3();
@@ -321,193 +360,4 @@ window.addEventListener('click', (event) => {
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(pointer, camera);
-
-    const unitIntersects = raycaster.intersectObjects(Object.values(visualUnits), true);
-    if (unitIntersects.length > 0) {
-        let currentObj = unitIntersects[0].object;
-        let foundId = null;
-        while (currentObj && currentObj !== scene) {
-            foundId = Object.keys(visualUnits).find(id => visualUnits[id] === currentObj);
-            if (foundId) break;
-            currentObj = currentObj.parent;
-        }
-        if (currentMode === 'move' && foundId && foundId.startsWith(myRole)) {
-            const unitIndex = parseInt(foundId.split('_')[1]);
-            if (!gameState.players[myRole].units[unitIndex].destroyed) {
-                selectedUnitId = foundId;
-                updateSelectionRing(visualUnits[foundId]); 
-                return; 
-            }
-        }
-    }
-
-    const intersects = raycaster.intersectObjects(fieldClickPlanes);
-    if (intersects.length > 0) {
-        const hit = intersects[0];
-        const clickedPlaneRole = hit.object.userData.targetRole;
-        const offsetZ = (clickedPlaneRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
-        
-        const serverX = hit.point.x + (FIELD_SIZE / 2);
-        const serverY = hit.point.z + (FIELD_SIZE / 2) - offsetZ;
-
-        if (currentMode === 'fire') {
-            hasDoneActionThisTurn = true; controlsBlock.classList.add('hidden');
-            socket.emit('playerAction', { type: 'fire', x: serverX, y: serverY, forcedRole: myRole });
-        } 
-        else if (currentMode === 'move' && selectedUnitId && clickedPlaneRole === myRole) {
-            hasDoneActionThisTurn = true; controlsBlock.classList.add('hidden');
-            updateSelectionRing(null); 
-            socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: parseInt(selectedUnitId.split('_')[1]), forcedRole: myRole });
-            selectedUnitId = null;
-        }
-    }
-});
-
-// --- SOCKET EVENTS ---
-socket.emit('joinGame');
-
-socket.on('waiting', () => { 
-    turnIndicator.innerText = "WAITING FOR OPPONENT..."; 
-    turnIndicator.style.color = "#ffa500";
-    updateControlsVisibility(); 
-});
-
-socket.on('gameStart', (data) => { 
-    myRole = data.role; 
-    myId = socket.id; 
-    gameState = data.state; 
-    updateTurnUI(); 
-    renderUnits(); 
-});
-
-socket.on('timerUpdate', (time) => { 
-    timerDisplay.innerText = time; 
-});
-
-socket.on('turnChanged', (data) => { 
-    gameState = data.state || gameState; 
-    gameState.turn = data.turn; 
-    timerDisplay.innerText = data.timer; 
-    hasDoneActionThisTurn = false; 
-    selectedUnitId = null; 
-    updateSelectionRing(null); 
-    updateTurnUI(); 
-    renderUnits(); 
-});
-
-socket.on('gameStateUpdate', (newState) => { 
-    gameState = newState; 
-    renderUnits(); 
-});
-
-socket.on('fireResult', (data) => {
-    createSplash(data.x, data.y, data.targetRole, data.result);
-    const offsetZ = (data.targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
-    const worldX = data.x - (FIELD_SIZE / 2);
-    const worldZ = data.y - (FIELD_SIZE / 2) + offsetZ;
-
-    const explosionGroup = new THREE.Group();
-    explosionGroup.position.set(worldX, 0.07, worldZ);
-    scene.add(explosionGroup);
-
-    const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32).rotateX(-Math.PI / 2);
-    const directMesh = new THREE.Mesh(directGeo, new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
-    explosionGroup.add(directMesh);
-
-    const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32).rotateX(-Math.PI / 2);
-    const splashMesh = new THREE.Mesh(splashGeo, new THREE.MeshBasicMaterial({ color: 0x888888, side: THREE.DoubleSide, transparent: true, opacity: 0.3 }));
-    splashMesh.position.y = -0.01; 
-    explosionGroup.add(splashMesh);
-
-    setTimeout(() => { scene.remove(explosionGroup); }, 2000);
-});
-
-socket.on('gameOver', (data) => { 
-    document.querySelectorAll('.hp-bar-container').forEach(el => el.remove());
-    if (data.winner === 'system') alert("OPPONENT DISCONNECTED. YOU WIN!");
-    else if (data.winner === 'timeout') alert("NO OPPONENT FOUND. MATCHMAKING TIMEOUT.");
-    else alert(data.winner === myId ? "VICTORY!" : "DEFEAT!"); 
-    window.location.reload(); 
-});
-
-function updateTurnUI() {
-    if (!gameState) return;
-    if (gameState.turn === myId) {
-        turnIndicator.innerText = "YOUR TURN!"; 
-        turnIndicator.style.color = "#2ed573";
-        if (!hasDoneActionThisTurn) currentMode = 'fire'; 
-    } else {
-        turnIndicator.innerText = "OPPONENT'S TURN..."; 
-        turnIndicator.style.color = "#ff4757"; 
-    }
-    updateControlsVisibility();
-}
-
-function renderUnits() {
-    const activeIdBeforeRender = selectedUnitId;
-    Object.keys(visualUnits).forEach(id => {
-        const el = document.getElementById(`hp-container-${id}`);
-        if (el) el.style.display = 'none';
-        scene.remove(visualUnits[id]);
-        delete visualUnits[id]; 
-    });
-    
-    burningUnitsPositions.length = 0; 
-    if (!gameState || !gameState.players || !myRole) return;
-
-    const p1 = gameState.players.p1; 
-    const p2 = gameState.players.p2;
-
-    if (p1 && p1.units) {
-        p1.units.forEach((unit, index) => {
-            if (unit.x === -1000 || unit.y === -1000) return;
-            if (myRole === 'p2' && !unit.destroyed) return;
-            createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1', unit.hp);
-            if (unit.destroyed) {
-                burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) + FIELD_OFFSET_Z });
-            }
-        });
-    }
-
-    if (p2 && p2.units) {
-        p2.units.forEach((unit, index) => {
-            if (unit.x === -1000 || unit.y === -1000) return;
-            if (myRole === 'p1' && !unit.destroyed) return;
-            createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
-            if (unit.destroyed) {
-                burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) - FIELD_OFFSET_Z });
-            }
-        });
-    }
-
-    if (activeIdBeforeRender && visualUnits[activeIdBeforeRender]) {
-        selectedUnitId = activeIdBeforeRender;
-        updateSelectionRing(visualUnits[selectedUnitId]);
-    }
-}
-
-// --- ANIMATION LOOP ---
-function animate() {
-    requestAnimationFrame(animate);
-    spawnFireAndSmoke();
-    updateHpBarsPositions();
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.mesh.position.x += p.vX; p.mesh.position.y += p.vY; p.mesh.position.z += p.vZ;
-        p.vY -= 0.005; p.life--;
-        if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
-    }
-    renderer.render(scene, camera);
-}
-animate();
-
-window.addEventListener('resize', () => {
-    updateCameraPosition();
-    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    updateControlsVisibility(); 
-});
-setTimeout(updateControlsVisibility, 100);
+    pointer.x = (event
