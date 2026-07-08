@@ -4,16 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Artillery Game 2.5D</title>
-    <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; position: fixed; background-color: #000; }
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
-    </style>
+    
+    <link rel="stylesheet" href="style.css">
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
     <div id="canvas-container"></div>
+
+    <div class="ui-container">
+        <div id="status-text" class="status-info">Connecting...</div>
+        <div id="timer-text" class="timer-info">TIME: 9</div>
+        <div id="controls-panel" class="controls-container">
+            <button id="btn-fire" class="btn-action btn-fire-active">FIRE</button>
+            <button id="btn-move" class="btn-action btn-inactive">MOVE</button>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
