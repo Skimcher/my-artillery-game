@@ -1,4 +1,9 @@
-const socket = io('https://artillery-game2.onrender.com');
+// НАСТРОЙКА КЛИЕНТА: Принудительный запуск чистого веб-сокета для обхода защиты фреймов Itch.io
+const socket = io('https://artillery-game2.onrender.com', {
+    transports: ['websocket'],
+    upgrade: false,
+    forceNew: true
+});
 
 // --- GAME STATE ---
 let myRole = null;          
@@ -18,7 +23,7 @@ const gltfLoader = new THREE.GLTFLoader();
 let sauModelTemplate = null; 
 let sauCenterOffset = new THREE.Vector3(); 
 
-// Константы размеров игры (Со всеми вашими уменьшениями радиусов)
+// Константы размеров игры
 const FIELD_SIZE = 25;       
 const DIRECT_RADIUS = 0.97;  // Итоговый критический радиус
 const SPLASH_RADIUS = 4.13;  // Итоговый радиус осколков
@@ -33,7 +38,7 @@ style.innerHTML = `
         width: 100%;
         height: 100%;
         overflow: hidden;
-        position: fixed; /* Предотвращает случайный скролл/сдвиг на iOS */
+        position: fixed; 
         background-color: #000;
     }
     #canvas-container {
@@ -50,7 +55,7 @@ document.head.appendChild(style);
 const container = document.getElementById('canvas-container') || document.body;
 const scene = new THREE.Scene();
 
-// Загрузка вашего JPG файла в качестве фонового изображения сцены
+// Загрузка бэкграунда
 const textureLoader = new THREE.TextureLoader();
 textureLoader.load('/assets/background.jpg', (bgTexture) => {
     scene.background = bgTexture;
@@ -60,7 +65,7 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// ИСПРАВЛЕНО: Балансируем камеру, чтобы поля умещались между кнопками и нижним краем
+// ИСПРАВЛЕНО: Балансируем камеру, чтобы поля умещались точно между кнопками и нижним краем экрана
 function updateCameraPosition() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -77,12 +82,10 @@ function updateCameraPosition() {
         camera.fov = BASE_FOV;
         camera.updateProjectionMatrix();
         
-        // Немного отодвинули назад по Z (47.5) и приподняли (54.5)
-        // Это делает поля чуть компактнее на экране, освобождая место сверху и снизу
+        // Отодвинули назад по Z (47.5) и подняли (54.5)
         camera.position.set(0, 54.5, 47.5); 
         
-        // Фокус lookAt скорректирован так, чтобы поля центрировались идеально: 
-        // Снизу виден фон травы, а сверху поля больше не залезают под кнопки
+        // Идеальное центрирование взгляда: снизу виден фон травы, сверху поля не залезают под кнопки
         camera.lookAt(0, -2, 2.5); 
     }
 }
@@ -91,8 +94,6 @@ updateCameraPosition();
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-// Включаем правильное отображение встроенных текстур и цветов модели
 renderer.outputColorSpace = THREE.SRGBColorSpace; 
 
 container.appendChild(renderer.domElement);
@@ -207,7 +208,6 @@ function selectRandomAliveUnit() {
     if (!units) return;
 
     const aliveUnitIndices = [];
-    
     units.forEach((unit, index) => {
         if (unit && !unit.destroyed && unit.x !== -1000) {
             aliveUnitIndices.push(index);
@@ -217,7 +217,6 @@ function selectRandomAliveUnit() {
     if (aliveUnitIndices.length > 0) {
         const randomIndex = aliveUnitIndices[Math.floor(Math.random() * aliveUnitIndices.length)];
         const targetId = `${myRole}_${randomIndex}`;
-        
         if (visualUnits[targetId]) {
             selectedUnitId = targetId;
             updateSelectionRing(visualUnits[targetId]);
@@ -387,12 +386,12 @@ uiContainer.innerHTML = '';
 
 const turnIndicator = document.createElement('div');
 turnIndicator.id = 'turn-indicator';
-turnIndicator.innerText = "Connecting...";
+turnIndicator.innerText = "ПОДКЛЮЧЕНИЕ...";
 uiContainer.appendChild(turnIndicator);
 
 const timerBlock = document.createElement('div');
 timerBlock.id = 'timer-block';
-timerBlock.innerHTML = `TIME: <span id="timer-val">0</span>`;
+timerBlock.innerHTML = `Время: <span id="timer-val">0</span>с`;
 uiContainer.appendChild(timerBlock);
 const timerDisplay = document.getElementById('timer-val');
 
@@ -412,7 +411,7 @@ controls.appendChild(btnMove);
 
 const styleUI = () => {
     uiContainer.style.position = 'absolute';
-    uiContainer.style.top = '10px'; // Чуть прижали к верху, чтобы дать место сцене
+    uiContainer.style.top = '10px'; 
     uiContainer.style.left = '50%';
     uiContainer.style.transform = 'translateX(-50%)';
     uiContainer.style.display = 'flex';
@@ -467,18 +466,18 @@ function updateButtonVisuals() {
     }
 }
 
-// ИСПРАВЛЕНО: Уменьшены размеры кнопок для ПК версии, чтобы не налезали на поля
+// ИСПРАВЛЕНО: Уменьшены размеры кнопок для ПК версии, чтобы они не перекрывали игровое поле
 function applyMobileLayout() {
     const isMobile = window.innerWidth <= 768;
     
-    turnIndicator.style.fontSize = isMobile ? '16px' : '26px'; // Слегка уменьшили титры на ПК
-    timerBlock.style.fontSize = isMobile ? '13px' : '20px';
+    turnIndicator.style.fontSize = isMobile ? '16px' : '26px'; 
+    timerBlock.style.fontSize = isMobile ? '13px' : '18px';
 
     controls.style.flexDirection = 'row';
     [btnFire, btnMove].forEach(btn => {
-        // На ПК кнопки теперь компактные (padding 8px 18px вместо 12px 24px) и не мешают обзору
+        // Уменьшенный компактный размер для ПК: padding 8px 18px
         btn.style.padding = isMobile ? '8px 18px' : '8px 18px';
-        btn.style.fontSize = isMobile ? '14px' : '14px';
+        btn.style.fontSize = isMobile ? '14px' : '13px';
     });
 
     const isMyTurn = gameState && gameState.turn === myId;
@@ -563,4 +562,157 @@ window.addEventListener('click', (event) => {
         } 
         else if (currentMode === 'move') {
             if (selectedUnitId && clickedPlaneRole === myRole) {
-                const unitIndex = parseInt(selectedUnitId.split('_')
+                const unitIndex = parseInt(selectedUnitId.split('_')[1]);
+                
+                hasDoneActionThisTurn = true; 
+                controls.style.setProperty('display', 'none', 'important');
+                updateSelectionRing(null); 
+                
+                socket.emit('playerAction', { type: 'move', x: serverX, y: serverY, unitIndex: unitIndex, forcedRole: myRole });
+                selectedUnitId = null;
+            }
+        }
+    }
+});
+
+// --- NETWORK ---
+socket.emit('joinGame');
+socket.on('waiting', () => { 
+    turnIndicator.innerText = "ОЖИДАНИЕ СОПЕРНИКА..."; 
+    turnIndicator.style.color = "#ffa500";
+    applyMobileLayout(); 
+});
+socket.on('gameStart', (data) => { 
+    myRole = data.role; 
+    myId = socket.id; 
+    gameState = data.state; 
+    updateTurnUI(); 
+    renderUnits(); 
+});
+socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
+socket.on('turnChanged', (data) => { 
+    gameState = data.state || gameState; 
+    gameState.turn = data.turn; 
+    timerDisplay.innerText = data.timer; 
+    hasDoneActionThisTurn = false; 
+    selectedUnitId = null;
+    updateSelectionRing(null);
+    updateTurnUI(); 
+});
+socket.on('gameStateUpdate', (newState) => { gameState = newState; renderUnits(); });
+
+socket.on('fireResult', (data) => {
+    createSplash(data.x, data.y, data.targetRole, data.result);
+
+    const offsetZ = (data.targetRole === 'p1') ? FIELD_OFFSET_Z : -FIELD_OFFSET_Z;
+    const worldX = data.x - (FIELD_SIZE / 2);
+    const worldZ = data.y - (FIELD_SIZE / 2) + offsetZ;
+
+    const explosionGroup = new THREE.Group();
+    explosionGroup.position.set(worldX, 0.07, worldZ);
+    scene.add(explosionGroup);
+
+    const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32);
+    directGeo.rotateX(-Math.PI / 2);
+    const directMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const directMesh = new THREE.Mesh(directGeo, directMat);
+    explosionGroup.add(directMesh);
+
+    const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32);
+    splashGeo.rotateX(-Math.PI / 2);
+    const splashMat = new THREE.MeshBasicMaterial({ color: 0x888888, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
+    const splashMesh = new THREE.Mesh(splashGeo, splashMat);
+    splashMesh.position.y = -0.01; 
+    explosionGroup.add(splashMesh);
+
+    setTimeout(() => {
+        scene.remove(explosionGroup);
+        directGeo.dispose(); directMat.dispose();
+        splashGeo.dispose(); splashMat.dispose();
+    }, 2000);
+});
+
+socket.on('gameOver', (data) => { 
+    document.querySelectorAll('.hp-bar-container').forEach(el => el.remove());
+    alert(data.winner === myId ? "ПОБЕДА!" : "ПОРАЖЕНИЕ!"); 
+    window.location.reload(); 
+});
+
+function updateTurnUI() {
+    if (!gameState) return;
+
+    if (gameState.turn === myId) {
+        turnIndicator.innerText = "ВАШ ХОД!"; 
+        turnIndicator.style.color = "#2ed573";
+        if (!hasDoneActionThisTurn) { 
+            currentMode = 'fire'; 
+        }
+    } else {
+        turnIndicator.innerText = "ХОД ПРОТИВНИКА..."; 
+        turnIndicator.style.color = "#ff4757"; 
+    }
+    applyMobileLayout();
+}
+
+function renderUnits() {
+    const activeIdBeforeRender = selectedUnitId;
+
+    Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
+    burningUnitsPositions.length = 0; 
+    
+    if (!gameState || !gameState.players) return;
+
+    const p1 = gameState.players.p1; const p2 = gameState.players.p2;
+
+    if (p1 && p1.units) {
+        p1.units.forEach((unit, index) => {
+            if (unit.x === -1000 || unit.y === -1000) {
+                const el = document.getElementById(`hp-container-p1_${index}`);
+                if (el) el.style.display = 'none';
+                return;
+            }
+            createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1', unit.hp);
+            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) + FIELD_OFFSET_Z });
+        });
+    }
+    if (p2 && p2.units) {
+        p2.units.forEach((unit, index) => {
+            if (unit.x === -1000 || unit.y === -1000) {
+                const el = document.getElementById(`hp-container-p2_${index}`);
+                if (el) el.style.display = 'none';
+                return;
+            }
+            createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
+            if (unit.destroyed) burningUnitsPositions.push({ x: unit.x - (FIELD_SIZE / 2), z: unit.y - (FIELD_SIZE / 2) - FIELD_OFFSET_Z });
+        });
+    }
+
+    if (activeIdBeforeRender && visualUnits[activeIdBeforeRender]) {
+        selectedUnitId = activeIdBeforeRender;
+        updateSelectionRing(visualUnits[selectedUnitId]);
+    }
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    spawnFireAndSmoke();
+    updateHpBarsPositions();
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.mesh.position.x += p.vX; p.mesh.position.y += p.vY; p.mesh.position.z += p.vZ;
+        p.vY -= 0.005; p.life--;
+        if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
+    }
+    renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+    updateCameraPosition();
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    applyMobileLayout(); 
+});
+
+setTimeout(applyMobileLayout, 100);
