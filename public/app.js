@@ -307,24 +307,23 @@ window.addEventListener('pointerdown', (e) => {
     }
 });
 
-// Слушатели событий лобби ожидания
 socket.on('waiting', (time) => { 
     info.innerText = 'WAITING FOR OPPONENT...'; 
     info.style.color = '#ff9f43'; 
-    timerEl.innerText = `LOBBY TIME: ${time}s`;
+    timerEl.innerText = `${time}s`;
 });
 
 socket.on('lobbyTimerUpdate', (time) => {
-    timerEl.innerText = `LOBBY TIME: ${time}s`;
+    timerEl.innerText = `${time}s`;
 });
 
 socket.on('gameStart', (data) => { myRole = data.role; myId = socket.id; gameState = data.state; updateTurnUI(); renderUnits(); });
-socket.on('timerUpdate', (t) => { timerEl.innerText = `TIME: ${t}`; });
+socket.on('timerUpdate', (t) => { timerEl.innerText = `${t}s`; });
 
 socket.on('turnChanged', (data) => { 
     gameState = data.state; 
     hasDoneActionThisTurn = false; 
-    timerEl.innerText = `TIME: ${data.timer}`; 
+    timerEl.innerText = `${data.timer}s`; 
     updateTurnUI(); 
     renderUnits(); 
 });
@@ -366,13 +365,23 @@ socket.on('gameOver', (data) => {
 
 function updateTurnUI() {
     if (gameState.turn === myRole) {
-        info.innerText = 'YOUR TURN!'; info.style.color = '#2ed573';
-        controls.style.display = 'flex';
+        info.innerText = ''; // НАДПИСЬ ИСЧЕЗАЕТ в ваш ход, чтобы не захламлять центр экрана!
+        controls.style.display = 'flex'; // Тонкая панель появляется строго сверху
         currentMode = 'fire';
         updateButtonsUI();
     } else {
-        info.innerText = "OPPONENT'S TURN..."; info.style.color = '#ff4757';
-        controls.style.display = 'none';
+        info.innerText = "OPPONENT'S TURN..."; 
+        info.style.color = '#ff4757';
+        controls.style.display = 'flex'; // Панель активна и сверху, но кнопки внутри скрыты/недоступны
+        // Нам нужно оставить видимым только таймер в ход оппонента:
+        btnFire.style.display = 'none';
+        btnMove.style.display = 'none';
+    }
+    
+    // Возвращаем кнопки на место, если ход наш
+    if (gameState.turn === myRole) {
+        btnFire.style.display = 'block';
+        btnMove.style.display = 'block';
     }
 }
 
