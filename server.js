@@ -16,7 +16,7 @@ const FIELD_SIZE = 25;
 const UNIT_RADIUS = 1.5;     // Модель 3м -> радиус 1.5м
 const DIRECT_RADIUS = 1.25;  // Диаметр 2.5м -> радиус 1.25м (критическое)
 const SPLASH_RADIUS = 4.0;   // Радиус осколков 4м
-const TURN_TIME = 9;         // 9 секунд на ход
+const TURN_TIME = 9;         // 9 секунд на ход каждому
 
 function generateUnits() {
     const min = UNIT_RADIUS;
@@ -62,7 +62,7 @@ io.on('connection', (socket) => {
                 p1: { id: p1.id, units: generateUnits() },
                 p2: { id: p2.id, units: generateUnits() }
             },
-            turn: 'p1', // Теперь ход хранит роль ('p1' или 'p2'), а не ID сокета! Это решает баг рассинхрона
+            turn: 'p1', // Первым всегда ходит p1
             timer: TURN_TIME,
             interval: null
         };
@@ -80,7 +80,7 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         const myRole = room.players.p1.id === socket.id ? 'p1' : 'p2';
         
-        // Проверяем, чей сейчас ход по роли
+        // Защита: ходить можно только в свой ход
         if (room.turn !== myRole) return;
 
         const opponentRole = myRole === 'p1' ? 'p2' : 'p1';
@@ -107,7 +107,7 @@ io.on('connection', (socket) => {
                 }
             });
 
-            checkGameOver(roomId);
+            if (checkGameOver(roomId)) return;
         } 
         else if (data.type === 'move') {
             const unit = room.players[myRole].units[data.unitIndex];
@@ -141,23 +141,38 @@ function switchTurn(roomId) {
     const room = rooms[roomId];
     if (!room) return;
     
+    // 1. Сначала ОСТАНАВЛИВАЕМ старый таймер текущего игрока
+    clearInterval(room.interval);
+    
+    // 2. Меняем активного игрока
     room.turn = room.turn === 'p1' ? 'p2' : 'p1';
     room.timer = TURN_TIME;
     
+    // 3. Отправляем обновленное состояние клиентам
     sendStateUpdate(roomId);
+    
+    // 4. ЗАПУСКАЕМ новый чистый таймер на следующие 9 секунд
+    startRoomTimer(roomId);
 }
 
 function startRoomTimer(roomId) {
     const room = rooms[roomId];
+    if (!room) return;
+
+    // Первоначальный синхронный показ 9 секунд при старте хода
+    io.to(roomId).emit('timerUpdate', room.timer);
+
     room.interval = setInterval(() => {
-        if (!rooms[roomId]) return;
-        room.timer--;
+        if (!rooms[roomId]) {
+            clearInterval(room.interval);
+            return;
+        }
         
-        // Отправляем тик таймера сразу всей комнате
+        room.timer--;
         io.to(roomId).emit('timerUpdate', room.timer);
         
         if (room.timer <= 0) {
-            switchTurn(roomId);
+            switchTurn(roomId); // Время вышло — ход автоматически переходит следующему
         }
     }, 1000);
 }
@@ -166,7 +181,6 @@ function sendStateUpdate(roomId) {
     const room = rooms[roomId];
     if (!room) return;
 
-    // Вместо поиска сокетов по ID, шлем индивидуальные состояния через io.to() напрямую участникам комнаты
     io.to(room.players.p1.id).emit('turnChanged', { turn: room.turn, state: getMaskedState(room, 'p1'), timer: room.timer });
     io.to(room.players.p2.id).emit('turnChanged', { turn: room.turn, state: getMaskedState(room, 'p2'), timer: room.timer });
 }
@@ -184,13 +198,15 @@ function checkGameOver(roomId) {
         
         io.to(roomId).emit('gameOver', { winnerRole: winnerRole });
         delete rooms[roomId];
+        return true;
     }
+    return false;
 }
 
 function getMaskedState(room, viewerRole) {
     const opponentRole = viewerRole === 'p1' ? 'p2' : 'p1';
     return {
-        turn: room.turn, // Возвращает роль 'p1' или 'p2'
+        turn: room.turn,
         players: {
             [viewerRole]: room.players[viewerRole],
             [opponentRole]: {
