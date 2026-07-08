@@ -19,12 +19,13 @@ const SPLASH_RADIUS = 4.0;
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 
-// --- УМНАЯ КАМЕРА С АВТОРАСЧЕТОМ ДЛЯ ЛЮБЫХ ЭКРАНОВ ---
-const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
+// --- УМНАЯ КАМЕРА С АВТОРАСЧЕТОМ ДЛЯ ЛЮБЫХ ЭКРАНОВ И IFRAME ---
+const camera = new THREE.PerspectiveCamera(41, 1, 0.1, 1000);
 
 function adjustCamera() {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    // Берем размеры строго родительского контейнера, а не window
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
     const aspect = width / height;
     
     camera.aspect = aspect;
@@ -46,13 +47,17 @@ function adjustCamera() {
     camera.updateProjectionMatrix();
 }
 
-adjustCamera();
-
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+// Инициализируем рендерер по размерам контейнера
+const initialWidth = container.clientWidth || window.innerWidth;
+const initialHeight = container.clientHeight || window.innerHeight;
+renderer.setSize(initialWidth, initialHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 container.appendChild(renderer.domElement);
+
+// Корректируем камеру после того, как рендерер добавил свой элемент
+adjustCamera();
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
@@ -94,7 +99,6 @@ function initFields() {
 }
 initFields();
 
-// Загрузка модели с увеличенным масштабом и исправлением высоты (Y)
 gltfLoader.load('models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
@@ -102,9 +106,6 @@ gltfLoader.load('models/sau.glb', (gltf) => {
     
     const scale = 3.75 / Math.max(size.x, size.y, size.z); 
     sauModelTemplate.scale.set(scale, scale, scale);
-
-    // Сдвигаем саму 3D-модель внутри контейнера чуть вверх, чтобы гусеницы стояли НА земле
-    // Если танк всё еще низко или высоко, измените значение 0.5 ниже
     sauModelTemplate.position.y = 0.5; 
 
     if (gameState) renderUnits();
@@ -255,6 +256,9 @@ function createVisualUnit(id, mX, mY, role, hp, isDestroyed) {
 
 function updateHpBarPositions() {
     const tempV = new THREE.Vector3();
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
+
     Object.keys(visualUnits).forEach(id => {
         const g = visualUnits[id];
         const dom = g.userData.hpDom;
@@ -262,8 +266,8 @@ function updateHpBarPositions() {
             g.getWorldPosition(tempV);
             tempV.y += 3.2; 
             tempV.project(camera);
-            const x = (tempV.x * .5 + .5) * window.innerWidth;
-            const y = (tempV.y * -.5 + .5) * window.innerHeight;
+            const x = (tempV.x * .5 + .5) * width;
+            const y = (tempV.y * -.5 + .5) * height;
             dom.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
         }
     });
@@ -293,8 +297,17 @@ function renderUnits() {
 window.addEventListener('pointerdown', (e) => {
     if (e.target.tagName === 'BUTTON' || !gameState || gameState.turn !== myRole || hasDoneActionThisTurn) return;
 
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
+
+    // Считаем координаты клика относительно контейнера игры, а не всего экрана
+    const rect = renderer.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / width) * 2 - 1,
+        -((e.clientY - rect.top) / height) * 2 + 1
+    );
+
     const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
     raycaster.setFromCamera(mouse, camera);
 
     if (currentMode === 'move') {
@@ -465,5 +478,7 @@ animate();
 
 window.addEventListener('resize', () => {
     adjustCamera();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
+    renderer.setSize(width, height);
 });
