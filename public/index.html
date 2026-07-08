@@ -1,15 +1,67 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Artillery Game</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="/socket.io/socket.io.js"></script>
-</head>
-<body>
-    <div id="canvas-container"></div>
-    <script src="app.js"></script>
-</body>
-</html>
+const express = require('express');
+const app = express();
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
+const path = require('path');
+
+app.use(express.static('public'));
+
+// Базовое состояние игры
+let gameState = {
+    turn: null,
+    players: {
+        p1: { id: null, units: [{x: 5, y: 5, hp: 100, destroyed: false}, {x: 10, y: 10, hp: 100, destroyed: false}] },
+        p2: { id: null, units: [{x: 5, y: 5, hp: 100, destroyed: false}, {x: 10, y: 10, hp: 100, destroyed: false}] }
+    }
+};
+
+let playersConnected = [];
+
+io.on('connection', (socket) => {
+    console.log('User connected:', socket.id);
+
+    socket.on('joinGame', () => {
+        if (playersConnected.length < 2) {
+            playersConnected.push(socket.id);
+            const role = playersConnected.length === 1 ? 'p1' : 'p2';
+            gameState.players[role].id = socket.id;
+
+            socket.emit('gameStart', { role: role, state: gameState });
+
+            if (playersConnected.length === 2) {
+                gameState.turn = playersConnected[0];
+                io.emit('turnChanged', { turn: gameState.turn, state: gameState, timer: 30 });
+            }
+        }
+    });
+
+    socket.on('playerAction', (data) => {
+        if (socket.id !== gameState.turn) return;
+
+        // Здесь должна быть ваша логика расчета урона/перемещения
+        console.log('Action received:', data);
+
+        // Пример: переключаем ход на другого игрока
+        const currentIndex = playersConnected.indexOf(socket.id);
+        const nextIndex = (currentIndex + 1) % 2;
+        gameState.turn = playersConnected[nextIndex];
+
+        // Уведомляем клиентов
+        io.emit('turnChanged', { turn: gameState.turn, state: gameState, timer: 30 });
+        
+        // Если это выстрел, можно отправить fireResult
+        if (data.type === 'fire') {
+            io.emit('fireResult', { x: data.x, y: data.y, targetRole: data.forcedRole === 'p1' ? 'p2' : 'p1' });
+        }
+    });
+
+    socket.on('disconnect', () => {
+        playersConnected = playersConnected.filter(id => id !== socket.id);
+        console.log('User disconnected');
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+});
