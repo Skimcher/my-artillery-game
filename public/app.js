@@ -19,12 +19,30 @@ const SPLASH_RADIUS = 4.0;
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 
-// --- НАСТРОЙКА КАМЕРЫ ДЛЯ ПОЛНОГО ОХВАТА НА СМАРТФОНАХ ---
+// --- БАЗОВАЯ ИНИЦИАЛИЗАЦИЯ КАМЕРЫ ---
 const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
-// Отодвинули по Z чуть дальше назад (было 44.5 -> стало 49.5) и подняли по Y (было 51.0 -> стало 55.0)
-camera.position.set(0, 55.0, 49.5);
-// Направили точку фокуса чуть ниже центра, чтобы полностью раскрыть нижнее поле
-camera.lookAt(0, -3.5, 2.5);
+
+// Функция адаптивного позиционирования камеры
+function adjustCamera() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    camera.aspect = width / height;
+
+    if (width < height) {
+        // МОБИЛЬНЫЕ (Вертикальный экран)
+        // Сдвигаем камеру ниже (Y=44) и ближе к игроку (Z=41), чтобы нижнее поле прижалось к низу
+        camera.position.set(0, 44.0, 41.0);
+        camera.lookAt(0, -5.5, 0.5);
+    } else {
+        // ПК (Широкоформатный экран)
+        camera.position.set(0, 51.0, 44.5);
+        camera.lookAt(0, -2, 3.2);
+    }
+    camera.updateProjectionMatrix();
+}
+
+// Сразу настраиваем положение камеры при старте
+adjustCamera();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -434,26 +452,8 @@ function animate() {
 }
 animate();
 
-// Умная адаптация FOV камеры под пропорции экрана при изменении размеров
+// Слушатель изменения размеров с умным перерасчетом позиции
 window.addEventListener('resize', () => {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    
-    camera.aspect = width / height;
-    
-    // Если экран вертикальный (мобильный), искусственно расширяем FOV, чтобы нижний край влез
-    if (width < height) {
-        camera.fov = 52; 
-    } else {
-        camera.fov = 41; 
-    }
-    
-    camera.updateProjectionMatrix();
-    renderer.setSize(width, height);
+    adjustCamera();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-// Первичная проверка при инициализации игры
-if (window.innerWidth < window.innerHeight) {
-    camera.fov = 52;
-    camera.updateProjectionMatrix();
-}
