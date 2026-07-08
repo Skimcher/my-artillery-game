@@ -94,15 +94,19 @@ function initFields() {
 }
 initFields();
 
-// Загрузка модели с увеличенным на 25% масштабом
+// Загрузка модели с увеличенным масштабом и исправлением высоты (Y)
 gltfLoader.load('models/sau.glb', (gltf) => {
     sauModelTemplate = gltf.scene;
     const box = new THREE.Box3().setFromObject(sauModelTemplate);
     const size = new THREE.Vector3(); box.getSize(size);
     
-    // Рассчитываем базовый scale и умножаем на 1.25 (было 3.0 -> стало 3.75)
     const scale = 3.75 / Math.max(size.x, size.y, size.z); 
     sauModelTemplate.scale.set(scale, scale, scale);
+
+    // Сдвигаем саму 3D-модель внутри контейнера чуть вверх, чтобы гусеницы стояли НА земле
+    // Если танк всё еще низко или высоко, измените значение 0.5 ниже
+    sauModelTemplate.position.y = 0.5; 
+
     if (gameState) renderUnits();
 });
 
@@ -139,7 +143,7 @@ function autoSelectUnit() {
 function drawSelectionRing(parentMesh) {
     removeSelectionRing();
     if (!parentMesh) return;
-    const ringGeo = new THREE.RingGeometry(0, 2.5, 32).rotateX(-Math.PI / 2); // Немного увеличили кольцо под новую модель
+    const ringGeo = new THREE.RingGeometry(0, 2.5, 32).rotateX(-Math.PI / 2); 
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
     selectionRing = new THREE.Mesh(ringGeo, ringMat);
     selectionRing.position.y = 0.06;
@@ -256,7 +260,7 @@ function updateHpBarPositions() {
         const dom = g.userData.hpDom;
         if (dom && dom.style.display !== 'none') {
             g.getWorldPosition(tempV);
-            tempV.y += 3.2; // Чуть приподняли полоску HP, так как танк стал выше
+            tempV.y += 3.2; 
             tempV.project(camera);
             const x = (tempV.x * .5 + .5) * window.innerWidth;
             const y = (tempV.y * -.5 + .5) * window.innerHeight;
