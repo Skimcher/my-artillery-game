@@ -1,5 +1,2 @@
-body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: sans-serif; }
-#canvas-container { width: 100vw; height: 100vh; }
-#loader { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 999; }
-#controls { position: absolute; bottom: 20px; left: 20px; z-index: 100; }
-button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
+#canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
