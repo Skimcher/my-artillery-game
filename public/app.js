@@ -60,7 +60,7 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// ИСПРАВЛЕНО ДЛЯ ПК: Поднимаем всю сцену выше, освобождая нижний край для бэкграунда во всех браузерах
+// ИСПРАВЛЕНО ДЛЯ ПК: Сдвигаем наклон камеры так, чтобы снизу гарантированно оставался зазор с травой
 function updateCameraPosition() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -73,15 +73,17 @@ function updateCameraPosition() {
         camera.position.set(0, 42, 38); 
         camera.lookAt(0, -2, -5); 
     } else {
-        // --- ПК ВЕРСИЯ (Подходит для Chrome, Opera, Mozilla, Edge и др.) ---
+        // --- ПК ВЕРСИЯ (Chrome, Opera, Mozilla, Edge и др.) ---
         camera.fov = BASE_FOV;
         camera.updateProjectionMatrix();
-        // Подняли камеру чуть выше по Y (49.5) и сместили по Z (45.5)
-        camera.position.set(0, 49.5, 45.5); 
-        // Изменили точку фокуса lookAt по Z с -3.8 на -1.5. 
-        // Благодаря этому камера наклоняется чуть ниже, поднимая боевые поля вверх на экране.
-        // Теперь снизу гарантированно виден красивый зазор бэкграунда, а поля не залезают под кнопки сверху.
-        camera.lookAt(0, -2, -1.5); 
+        
+        // Установили оптимальную высоту (51.0) и расстояние (44.5)
+        camera.position.set(0, 51.0, 44.5); 
+        
+        // Изменили lookAt на (0, -2, 3.2). За счет смещения фокуса вперед по оси Z, 
+        // камера наклоняется чуть сильнее вниз. Это заставляет всю игровую сцену 
+        // уйти выше, аккуратно оголяя полосу бэкграунда под нижним боевым полем.
+        camera.lookAt(0, -2, 3.2); 
     }
 }
 updateCameraPosition();
@@ -177,7 +179,7 @@ gltfLoader.load('/models/sau.glb', (gltf) => {
     if (gameState) renderUnits();
 });
 
-// --- ПОДСВЕТКА ВЫБРАННОЙ САУ (Залитый белый круг радиусом 3 метра) ---
+// --- ПОДСВЕТКА ВЫБРАННОЙ САУ ---
 function updateSelectionRing(unitGroup) {
     if (selectionRing) {
         if (selectionRing.parent) selectionRing.parent.remove(selectionRing);
@@ -198,7 +200,6 @@ function updateSelectionRing(unitGroup) {
     unitGroup.add(selectionRing);
 }
 
-// Функция для выбора случайной живой САУ текущего игрока
 function selectRandomAliveUnit() {
     if (!gameState || !myRole || !gameState.players || !gameState.players[myRole]) return;
     
@@ -374,7 +375,7 @@ function spawnFireAndSmoke() {
     });
 }
 
-// --- СОЗДАНИЕ И ПОЗИЦИОНИРОВАНИЕ ИНТЕРФЕЙСА ПО ЦЕНТРУ ЭКРАНА ---
+// --- СОЗДАНИЕ И ПОЗИЦИОНИРОВАНИЕ ИНТЕРФЕЙСА ---
 let uiContainer = document.getElementById('ui-container');
 if (!uiContainer) {
     uiContainer = document.createElement('div');
@@ -516,7 +517,6 @@ window.addEventListener('click', (event) => {
 
     raycaster.setFromCamera(pointer, camera);
 
-    // --- ЛОГИКА КЛИКА НА ОБЪЕКТЫ ---
     const unitIntersects = raycaster.intersectObjects(Object.values(visualUnits), true);
     
     if (unitIntersects.length > 0) {
@@ -542,7 +542,6 @@ window.addEventListener('click', (event) => {
         }
     }
 
-    // --- ЛОГИКА КЛИКА ПО ЗЕМЛЕ ---
     const intersects = raycaster.intersectObjects(fieldClickPlanes);
 
     if (intersects.length > 0) {
