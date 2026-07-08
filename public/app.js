@@ -1,42 +1,38 @@
-// --- ИНИЦИАЛИЗАЦИЯ И ПОДКЛЮЧЕНИЕ ---
+// --- ИНИЦИАЛИЗАЦИЯ ---
 const socket = io('https://artillery-game2.onrender.com', { transports: ['websocket'] });
 
-// --- СТИЛИ (CSS) ---
-const style = document.createElement('style');
-style.innerHTML = `
-    #controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 10px; }
-    #controls button { padding: 10px 20px; cursor: pointer; }
-    .hp-bar-container { position: absolute; width: 60px; height: 8px; background: rgba(0,0,0,0.6); border: 1px solid #fff; pointer-events: none; }
-    .hp-bar-fill { height: 100%; background: #2ed573; transition: width 0.2s; }
-`;
-document.head.appendChild(style);
-
-// --- ФУНКЦИИ ОТРИСОВКИ ---
-function createVisualUnit(id, hp) {
-    const hpContainer = document.createElement('div');
-    hpContainer.id = `hp-${id}`;
-    hpContainer.className = 'hp-bar-container';
-    hpContainer.innerHTML = `<div class="hp-bar-fill" style="width: ${hp}%"></div>`;
-    document.body.appendChild(hpContainer);
-}
-
-// --- THREE.JS СЦЕНА ---
+// --- СЦЕНА И КАМЕРА ---
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+camera.position.set(0, 50, 50);
+camera.lookAt(0, 0, 0);
 
+// --- СОЗДАНИЕ ПОЛЕЙ ---
+const fieldGeo = new THREE.PlaneGeometry(20, 20);
+const fieldMat = new THREE.MeshBasicMaterial({ color: 0x8b4513, side: THREE.DoubleSide });
+const field1 = new THREE.Mesh(fieldGeo, fieldMat);
+const field2 = new THREE.Mesh(fieldGeo, fieldMat);
+field1.position.set(0, 0, 12);
+field2.position.set(0, 0, -12);
+field1.rotation.x = field2.rotation.x = Math.PI / 2;
+scene.add(field1, field2);
+
+// --- ЦИКЛ АНИМАЦИИ ---
 function animate() {
     requestAnimationFrame(animate);
     renderer.render(scene, camera);
 }
 animate();
 
-// --- ПРОВЕРКА СОКЕТА ---
+// --- ЛОГИКА ---
 socket.on('connect', () => {
-    console.log("Соединение установлено!");
+    console.log("Соединение стабильно, запрашиваем игру...");
     socket.emit('joinGame');
 });
 
-console.log("Файл app.js успешно загружен до конца.");
+socket.on('gameStart', (data) => {
+    console.log("Игра началась!", data);
+});
