@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io('https://artillery-game2.onrender.com');
 
 // --- GAME STATE ---
 let myRole = null;          
