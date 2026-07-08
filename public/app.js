@@ -19,29 +19,41 @@ const SPLASH_RADIUS = 4.0;
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 
-// --- БАЗОВАЯ ИНИЦИАЛИЗАЦИЯ КАМЕРЫ ---
+// --- УМНАЯ КАМЕРА С АВТОРАСЧЕТОМ ДЛЯ ЛЮБЫХ ЭКРАНОВ ---
 const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// Функция адаптивного позиционирования камеры
 function adjustCamera() {
     const width = window.innerWidth;
     const height = window.innerHeight;
-    camera.aspect = width / height;
+    const aspect = width / height;
+    
+    camera.aspect = aspect;
 
-    if (width < height) {
-        // МОБИЛЬНЫЕ (Вертикальный экран)
-        // Сдвигаем камеру ниже (Y=44) и ближе к игроку (Z=41), чтобы нижнее поле прижалось к низу
-        camera.position.set(0, 44.0, 41.0);
-        camera.lookAt(0, -5.5, 0.5);
+    if (aspect < 1) {
+        // СМАРТФОНЫ И ВЕРТИКАЛЬНЫЕ ЭКРАНЫ
+        // Вычисляем коэффициент сужения экрана
+        const multiplier = 1 / aspect; 
+        
+        // Динамически подбираем высоту и удаление, чтобы поля идеально вписались
+        const dynamicY = 38.0 * multiplier;
+        const dynamicZ = 33.0 * multiplier;
+        
+        // Ставим жесткие рамки-ограничители, чтобы камера не улетала в космос
+        camera.position.set(0, Math.min(dynamicY, 56), Math.min(dynamicZ, 50));
+        
+        // Центрируем взгляд камеры с легким наклоном для полного обзора нижней кромки
+        camera.lookAt(0, -4.5, 2.0);
     } else {
-        // ПК (Широкоформатный экран)
+        // ПК И ПЛАНШЕТЫ (Широкий экран)
+        // Идеальные стандартные настройки десктопа
         camera.position.set(0, 51.0, 44.5);
         camera.lookAt(0, -2, 3.2);
     }
+    
     camera.updateProjectionMatrix();
 }
 
-// Сразу настраиваем положение камеры при старте
+// Запускаем расчет при загрузке страницы
 adjustCamera();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -452,7 +464,6 @@ function animate() {
 }
 animate();
 
-// Слушатель изменения размеров с умным перерасчетом позиции
 window.addEventListener('resize', () => {
     adjustCamera();
     renderer.setSize(window.innerWidth, window.innerHeight);
