@@ -60,20 +60,25 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
+// ИСПРАВЛЕНО: Адаптивный подъем нижней части игрового поля на ПК-версиях
 function updateCameraPosition() {
     const width = window.innerWidth;
     const height = window.innerHeight;
     const aspect = width / height;
 
     if (aspect < 1) {
+        // --- МОБИЛЬНАЯ ВЕРСИЯ (Без изменений) ---
         camera.fov = BASE_FOV / aspect * 0.85; 
+        camera.updateProjectionMatrix();
+        camera.position.set(0, 42, 38); 
+        camera.lookAt(0, -2, -5); 
     } else {
+        // --- ПК ВЕРСИЯ (Отодвигаем камеру назад и поднимаем точку обзора, чтобы снизу был виден фон) ---
         camera.fov = BASE_FOV;
+        camera.updateProjectionMatrix();
+        camera.position.set(0, 46, 43); 
+        camera.lookAt(0, -1, -2); 
     }
-    camera.updateProjectionMatrix();
-
-    camera.position.set(0, 42, 38); 
-    camera.lookAt(0, -2, -5); 
 }
 updateCameraPosition();
 
@@ -530,7 +535,7 @@ window.addEventListener('click', (event) => {
             if (targetUnit && !targetUnit.destroyed) {
                 selectedUnitId = foundId;
                 updateSelectionRing(visualUnits[foundId]); 
-                return; // Выходим, чтобы клик не засчитался как перемещение под себя
+                return; 
             }
         }
     }
@@ -584,7 +589,7 @@ socket.on('gameStart', (data) => {
 });
 socket.on('timerUpdate', (time) => { timerDisplay.innerText = time; });
 socket.on('turnChanged', (data) => { 
-    gameState = data.state || gameState; // Обновляем состояние игры новыми маскированными данными с сервера
+    gameState = data.state || gameState; 
     gameState.turn = data.turn; 
     timerDisplay.innerText = data.timer; 
     hasDoneActionThisTurn = false; 
