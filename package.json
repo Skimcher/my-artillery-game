@@ -1,7 +1,7 @@
 {
-  "name": "artillery-2.5d-game",
+  "name": "artillery-game-25d",
   "version": "1.0.0",
-  "description": "2.5D Multiplayer Artillery Game",
+  "description": "2.5D Artillery Game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
