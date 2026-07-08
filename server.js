@@ -5,7 +5,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// БРОНЕБОЙНАЯ НАСТРОЙКА CORS: разрешаем любые внешние подключения и фреймы Itch.io
+// БРОНЕБОЙНАЯ НАСТРОЙКА CORS для Itch.io фреймов
 const io = require('socket.io')(server, {
     cors: {
         origin: "*", 
@@ -15,13 +15,18 @@ const io = require('socket.io')(server, {
     }
 });
 
-// Отдача статических файлов из папки public
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- ИГРОВАЯ ЛОГИКА СЕРВЕРА ---
 const FIELD_SIZE = 25;
 let waitingPlayer = null;
 const activeGames = {}; // room -> game state
+
+// Функция генерации случайной позиции внутри квадратного поля (с отступом от краев)
+function getRandomPosition() {
+    const min = 2;
+    const max = FIELD_SIZE - 2;
+    return Math.random() * (max - min) + min;
+}
 
 function createInitialState(p1Id, p2Id) {
     return {
@@ -29,18 +34,18 @@ function createInitialState(p1Id, p2Id) {
         players: {
             p1: {
                 id: p1Id,
+                // Строго 2 САУ в случайных местах
                 units: [
-                    { x: 5,  y: 5,  hp: 100, destroyed: false },
-                    { x: 12, y: 5,  hp: 100, destroyed: false },
-                    { x: 20, y: 5,  hp: 100, destroyed: false }
+                    { x: getRandomPosition(), y: getRandomPosition(), hp: 100, destroyed: false },
+                    { x: getRandomPosition(), y: getRandomPosition(), hp: 100, destroyed: false }
                 ]
             },
             p2: {
                 id: p2Id,
+                // Строго 2 САУ в случайных местах
                 units: [
-                    { x: 5,  y: 20, hp: 100, destroyed: false },
-                    { x: 12, y: 20, hp: 100, destroyed: false },
-                    { x: 20, y: 20, hp: 100, destroyed: false }
+                    { x: getRandomPosition(), y: getRandomPosition(), hp: 100, destroyed: false },
+                    { x: getRandomPosition(), y: getRandomPosition(), hp: 100, destroyed: false }
                 ]
             }
         },
@@ -48,7 +53,6 @@ function createInitialState(p1Id, p2Id) {
     };
 }
 
-// Управление комнатами и таймерами
 let timerIntervals = {};
 function startTurnTimer(room) {
     if (timerIntervals[room]) clearInterval(timerIntervals[room]);
@@ -64,7 +68,6 @@ function startTurnTimer(room) {
         io.to(room).emit('timerUpdate', state.timer);
         
         if (state.timer <= 0) {
-            // Смена хода по таймауту
             state.turn = (state.turn === state.players.p1.id) ? state.players.p2.id : state.players.p1.id;
             state.timer = 30;
             io.to(room).emit('turnChanged', { turn: state.turn, timer: state.timer, state: state });
@@ -73,7 +76,7 @@ function startTurnTimer(room) {
 }
 
 io.on('connection', (socket) => {
-    console.log(`Пользователь подключился: ${socket.id}`);
+    console.log(`User connected: ${socket.id}`);
 
     socket.on('joinGame', () => {
         if (!waitingPlayer) {
@@ -118,7 +121,6 @@ io.on('connection', (socket) => {
                 result: 'splash'
             });
 
-            // Расчет урона юнитам противника
             state.players[opponentRole].units.forEach(unit => {
                 if (unit.destroyed) return;
                 const dist = Math.sqrt(Math.pow(unit.x - action.x, 2) + Math.pow(unit.y - action.y, 2));
@@ -136,12 +138,12 @@ io.on('connection', (socket) => {
         else if (action.type === 'move') {
             const unit = state.players[role].units[action.unitIndex];
             if (unit && !unit.destroyed) {
-                unit.x = Math.max(0, Math.min(FIELD_SIZE, action.x));
-                unit.y = Math.max(0, Math.min(FIELD_SIZE, action.y));
+                // Ограничиваем перемещение строго в рамках игровой платформы
+                unit.x = Math.max(0.5, Math.min(FIELD_SIZE - 0.5, action.x));
+                unit.y = Math.max(0.5, Math.min(FIELD_SIZE - 0.5, action.y));
             }
         }
 
-        // Проверка на окончание игры
         const opponentAlive = state.players[opponentRole].units.some(u => !u.destroyed);
         if (!opponentAlive) {
             clearInterval(timerIntervals[room]);
@@ -150,21 +152,19 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Передача хода
         state.turn = state.players[opponentRole].id;
         state.timer = 30;
         io.to(room).emit('turnChanged', { turn: state.turn, timer: state.timer, state: state });
     });
 
     socket.on('disconnect', () => {
-        console.log(`Пользователь отключился: ${socket.id}`);
         if (waitingPlayer && waitingPlayer.id === socket.id) {
             waitingPlayer = null;
         }
         if (socket.gameState) {
             const { room } = socket.gameState;
             clearInterval(timerIntervals[room]);
-            io.to(room).emit('gameOver', { winner: 'system', reason: 'Opponent disconnected' });
+            io.to(room).emit('gameOver', { winner: 'system' });
             delete activeGames[room];
         }
     });
@@ -172,5 +172,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
