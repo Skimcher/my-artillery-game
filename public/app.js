@@ -1,33 +1,28 @@
 // --- ИНИЦИАЛИЗАЦИЯ ---
 const socket = io('https://artillery-game2.onrender.com', { transports: ['websocket'] });
 
-// --- СЦЕНА THREE.JS ---
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-camera.position.set(0, 50, 50);
-camera.lookAt(0, 0, 0);
+// --- ОТЛАДОЧНЫЙ ЛОГ ВСЕХ СОБЫТИЙ ---
+socket.onAny((event, ...args) => {
+    console.log("ПРИШЛО СОБЫТИЕ:", event, args);
+});
 
-// --- ЛОГИКА СОКЕТОВ ---
+// --- ЛОГИКА ---
 socket.on('connect', () => {
-    console.log("Соединение установлено!");
+    console.log("Соединение с сервером установлено, отправляю joinGame...");
     socket.emit('joinGame');
 });
 
 socket.on('gameStart', (data) => {
-    console.log("Игра началась! Скрываем экран загрузки.", data);
-    // Прячем экран "CONNECTING..."
+    console.log("СЕРВЕР ПРИСЛАЛ gameStart:", data);
     const loader = document.getElementById('loader');
     if (loader) loader.style.display = 'none';
     
-    // Здесь будет отрисовка танков (renderUnits)
+    // Если игра началась, пробуем отрисовать юнитов
+    if (typeof renderUnits === 'function') {
+        renderUnits();
+    }
 });
 
-// --- ЦИКЛ ---
-function animate() {
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
-}
-animate();
+socket.on('connect_error', (err) => {
+    console.error("ОШИБКА СОЕДИНЕНИЯ:", err);
+});
