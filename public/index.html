@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Настройка viewport для корректного масштабирования на смартфонах -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>САУ Дуэль 3D</title>
+    <title>SPG Duel 3D</title>
     <style>
         body {
             margin: 0;
@@ -12,14 +11,12 @@
             background-color: #000;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-
         #canvas-container {
             width: 100vw;
             height: 100vh;
             display: block;
         }
-
-        /* --- UI ИНТЕРФЕЙС (ВЕРСИЯ ДЛЯ ПК) --- */
+        /* --- UI CONTAINER (PC VERSION) --- */
         #ui-container {
             position: absolute;
             top: 20px;
@@ -33,7 +30,6 @@
             flex-direction: column;
             align-items: center;
         }
-
         #turn-indicator {
             font-size: 24px;
             font-weight: 900;
@@ -43,7 +39,6 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.8);
             color: #fff;
         }
-
         #timer-container {
             font-size: 18px;
             color: #fff;
@@ -51,19 +46,16 @@
             margin-bottom: 15px;
             text-shadow: 0 1px 3px rgba(0,0,0,0.8);
         }
-
         #controls {
             pointer-events: auto;
             display: inline-block;
             transition: opacity 0.3s ease, transform 0.3s ease;
         }
-
         #controls.hidden {
             opacity: 0;
             pointer-events: none;
             transform: translateY(-10px);
         }
-
         button {
             padding: 12px 24px;
             font-size: 16px;
@@ -77,19 +69,16 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.4);
             transition: all 0.2s ease;
         }
-
         button:active {
             transform: translateY(2px);
             box-shadow: 0 2px 4px rgba(0,0,0,0.4);
         }
-
         button.active {
             background: #111;
             color: #fff;
             border-color: #fff;
         }
-
-        /* --- СТИЛИ ДЛЯ HP-БАРОВ НАД МОДЕЛЯМИ САУ --- */
+        /* --- HP BARS OVER MODELS --- */
         .hp-bar-container {
             position: absolute;
             width: 70px;
@@ -103,14 +92,12 @@
             display: none;
             box-shadow: 0 2px 4px rgba(0,0,0,0.4);
         }
-
         .hp-bar-fill {
             height: 100%;
             width: 100%;
             background: #2ed573;
             transition: width 0.3s ease;
         }
-
         .hp-bar-text {
             position: absolute;
             top: 50%;
@@ -121,34 +108,24 @@
             font-weight: bold;
             font-family: monospace;
         }
-
-        /* ======================================================== */
-        /* АДАПТИВНЫЙ CSS ДЛЯ СМАРТФОНОВ (Экран менее 768px)          */
-        /* ======================================================== */
+        /* --- RESPONSIVE FOR SMARTPHONES (< 768px) --- */
         @media (max-width: 768px) {
-            /* Оставляем надпись и таймер у самого верхнего края */
             #ui-container {
                 top: 10px;
                 left: 0;
                 transform: none;
                 width: 100%;
-                display: block; /* Сбрасываем флекс для ПК, чтобы позиционировать кнопки отдельно */
+                display: block;
             }
-
-            /* Текст хода крупный и в самой верхней свободной зоне экрана */
             #turn-indicator {
                 font-size: 44px;
                 margin-bottom: 5px;
                 text-shadow: 0 4px 8px rgba(0,0,0,0.9);
             }
-
             #timer-container {
                 font-size: 26px;
                 margin-bottom: 0;
             }
-
-            /* ПЕРЕМЕЩАЕМ КНОПКИ В ЦЕНТР ЭКРАНА ПО ВЕРТИКАЛИ 
-               Они встанут ровно в пустое пространство между полями боя */
             #controls {
                 position: fixed;
                 top: 50%;
@@ -159,25 +136,19 @@
                 width: 100%;
                 z-index: 20;
             }
-
-            /* Если кнопки скрыты, к ним добавляется класс .hidden — плавно гасим и убираем кликабельность */
             #controls.hidden {
                 opacity: 0;
                 pointer-events: none;
                 transform: translate(-50%, -60%);
             }
-
-            /* Кнопки в 2 раза крупнее, чтобы не промахнуться пальцем */
             button {
-                padding: 18px 40px;  
-                font-size: 30px;     
-                margin: 0 15px;      
-                border-radius: 12px; 
-                border-width: 4px;   
+                padding: 18px 40px;                  
+                font-size: 30px;                     
+                margin: 0 15px;                      
+                border-radius: 12px;                 
+                border-width: 4px;                   
                 box-shadow: 0 6px 12px rgba(0,0,0,0.6);
-            }
-            
-            /* Чуть увеличиваем отображение HP-баров на смартфонах */
+            }                        
             .hp-bar-container {
                 width: 90px;
                 height: 18px;
@@ -189,27 +160,16 @@
     </style>
 </head>
 <body>
-
-    <!-- Контейнер для рендера Three.js сцены -->
     <div id="canvas-container"></div>
-
-    <!-- Игровой интерфейс управления -->
     <div id="ui-container">
-        <!-- Надпись фазы (YOUR TURN / OPPONENT'S TURN) -->
-        <div id="turn-indicator">Подключение...</div>
-
-        <!-- Время хода -->
-        <div id="timer-container">Время: <span id="timer">0</span>с</div>
-
-        <!-- Кнопки управления (FIRE / MOVE) -->
-        <!-- Для мобилок этот блок вырывается из ui-container и встает по центру экрана через position: fixed -->
+        <div id="turn-indicator">Connecting...</div>
+        <div id="timer-container">Time: <span id="timer">0</span>s</div>
         <div id="controls" class="hidden">
             <button id="btn-fire" class="active">FIRE</button>
             <button id="btn-move">MOVE</button>
         </div>
     </div>
 
-    <!-- Подключение библиотек и игровых скриптов -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="/socket.io/socket.io.js"></script>
