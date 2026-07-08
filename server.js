@@ -1,262 +1,174 @@
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
+const path = require('path');
 
-const expressApp = express();
-const server = http.createServer(expressApp);
-const io = new Server(server);
+const app = express();
+const server = http.createServer(app);
 
-expressApp.use(express.static('public'));
-
-let rooms = {}; 
-let waitingPlayer = null; 
-
-// --- ИГРОВЫЕ ПАРАМЕТРЫ ---
-const FIELD_SIZE = 25;       // Размер поля в метрах
-const UNIT_RADIUS = 1.725;   // 3.45м / 2 (размер 3D-модели +15%)
-const DIRECT_RADIUS = 0.97;  // Радиус критического попадания (100 HP / уничтожение)
-const SPLASH_RADIUS = 4.13;  // Радиус осколков (строго -51 HP)
-
-// Генерация случайных позиций САУ на поле боя
-function generateRandomUnits() {
-    const min = UNIT_RADIUS;
-    const max = FIELD_SIZE - UNIT_RADIUS;
-
-    const u1 = { 
-        x: min + Math.random() * (max - min), 
-        y: min + Math.random() * (max - min), 
-        hp: 100,
-        destroyed: false 
-    };
-    
-    let u2 = { 
-        x: min + Math.random() * (max - min), 
-        y: min + Math.random() * (max - min), 
-        hp: 100,
-        destroyed: false 
-    };
-    
-    // Проверка, чтобы пушки не заспавнились слишком близко друг к другу
-    while (Math.hypot(u1.x - u2.x, u1.y - u2.y) < (UNIT_RADIUS * 2)) {
-        u2.x = min + Math.random() * (max - min);
-        u2.y = min + Math.random() * (max - min);
+// БРОНЕБОЙНАЯ НАСТРОЙКА CORS: разрешаем любые внешние подключения и фреймы Itch.io
+const io = require('socket.io')(server, {
+    cors: {
+        origin: "*", 
+        methods: ["GET", "POST"],
+        allowedHeaders: ["my-custom-header"],
+        credentials: true
     }
-    
-    return [u1, u2];
-}
-
-io.on('connection', (socket) => {
-    console.log(`Игрок подключился: ${socket.id}`);
-
-    socket.on('joinGame', () => {
-        if (!waitingPlayer) {
-            const roomId = 'room_' + socket.id;
-            let waitingTimerValue = 300;
-            
-            const waitingInterval = setInterval(() => {
-                waitingTimerValue--;
-                socket.emit('timerUpdate', waitingTimerValue);
-                
-                if (waitingTimerValue <= 0) {
-                    clearInterval(waitingInterval);
-                    socket.emit('gameOver', { winner: null }); 
-                    if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
-                        waitingPlayer = null;
-                    }
-                }
-            }, 1000);
-
-            waitingPlayer = { socket, roomId, interval: waitingInterval };
-            socket.join(roomId);
-            socket.emit('waiting', 'Ожидание соперника...');
-            socket.emit('timerUpdate', waitingTimerValue); 
-            
-        } else {
-            clearInterval(waitingPlayer.interval);
-            const roomId = waitingPlayer.roomId;
-            const player1 = waitingPlayer.socket;
-            const player2 = socket;
-            
-            socket.join(roomId);
-            waitingPlayer = null; 
-
-            rooms[roomId] = {
-                players: {
-                    p1: { id: player1.id, role: 'p1', units: generateRandomUnits() }, 
-                    p2: { id: player2.id, role: 'p2', units: generateRandomUnits() }  
-                },
-                turn: player1.id, 
-                timer: 9,
-                roomId: roomId,
-                interval: null
-            };
-
-            player1.emit('gameStart', { role: 'p1', state: getMaskedState(rooms[roomId], 'p1') });
-            player2.emit('gameStart', { role: 'p2', state: getMaskedState(rooms[roomId], 'p2') });
-
-            startGameTimer(roomId);
-        }
-    });
-
-    // --- ОБРАБОТКА ДЕЙСТВИЙ ИГРОКА ---
-    socket.on('playerAction', (action) => {
-        const roomId = Object.keys(rooms).find(r => 
-            rooms[r].players.p1.id === socket.id || 
-            rooms[r].players.p2.id === socket.id
-        );
-        if (!roomId) return;
-
-        const room = rooms[roomId];
-        if (room.turn !== socket.id) return; 
-
-        const activeRole = room.players.p1.id === socket.id ? 'p1' : 'p2';
-        const opponentRole = activeRole === 'p1' ? 'p2' : 'p1';
-
-        if (action.type === 'fire') {
-            let hitResult = 'miss';
-            const targetUnits = room.players[opponentRole].units;
-
-            targetUnits.forEach((unit) => {
-                if (unit.destroyed) return;
-
-                const distance = Math.hypot(unit.x - action.x, unit.y - action.y);
-
-                if (distance <= DIRECT_RADIUS) {
-                    unit.hp = 0; 
-                    unit.destroyed = true;
-                    hitResult = 'direct';
-                } 
-                else if (distance <= SPLASH_RADIUS) {
-                    unit.hp -= 51; 
-                    hitResult = 'splash';
-                    
-                    if (unit.hp <= 0) {
-                        unit.hp = 0;
-                        unit.destroyed = true;
-                    }
-                }
-            });
-
-            io.to(roomId).emit('fireResult', { x: action.x, y: action.y, targetRole: opponentRole, result: hitResult });
-            
-            checkWinCondition(roomId);
-            switchTurn(roomId);
-        } 
-        else if (action.type === 'move') {
-            const unit = room.players[activeRole].units[action.unitIndex];
-            
-            if (unit && !unit.destroyed) {
-                const min = UNIT_RADIUS;
-                const max = FIELD_SIZE - UNIT_RADIUS;
-                
-                unit.x = Math.max(min, Math.min(max, action.x));
-                unit.y = Math.max(min, Math.min(max, action.y));
-                
-                console.log(`Игрок ${activeRole} передвинул САУ №${action.unitIndex} в: X=${unit.x}, Y=${unit.y}`);
-                
-                // Мгновенно обновляем состояние на клиентах, чтобы танк изменил позицию визуально
-                const p1Socket = io.sockets.sockets.get(room.players.p1.id);
-                const p2Socket = io.sockets.sockets.get(room.players.p2.id);
-                if (p1Socket) p1Socket.emit('gameStateUpdate', getMaskedState(room, 'p1'));
-                if (p2Socket) p2Socket.emit('gameStateUpdate', getMaskedState(room, 'p2'));
-            }
-            
-            switchTurn(roomId);
-        }
-    });
-
-    socket.on('disconnect', () => {
-        console.log(`Игрок отключился: ${socket.id}`);
-        if (waitingPlayer && waitingPlayer.socket.id === socket.id) {
-            clearInterval(waitingPlayer.interval);
-            waitingPlayer = null;
-        }
-        const roomId = Object.keys(rooms).find(r => rooms[r].players.p1.id === socket.id || rooms[r].players.p2.id === socket.id);
-        if (roomId) {
-            clearInterval(rooms[roomId].interval);
-            const winnerId = rooms[roomId].players.p1.id === socket.id ? rooms[roomId].players.p2.id : rooms[roomId].players.p1.id;
-            io.to(roomId).emit('gameOver', { winner: winnerId });
-            delete rooms[roomId];
-        }
-    });
 });
 
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ИГРЫ ---
+// Отдача статических файлов из папки public
+app.use(express.static(path.join(__dirname, 'public')));
 
-function startGameTimer(roomId) {
-    const room = rooms[roomId];
-    if (!room) return;
+// --- ИГРОВАЯ ЛОГИКА СЕРВЕРА ---
+const FIELD_SIZE = 25;
+let waitingPlayer = null;
+const activeGames = {}; // room -> game state
 
-    if (room.interval) clearInterval(room.interval);
-    room.timer = 9;
+function createInitialState(p1Id, p2Id) {
+    return {
+        turn: p1Id,
+        players: {
+            p1: {
+                id: p1Id,
+                units: [
+                    { x: 5,  y: 5,  hp: 100, destroyed: false },
+                    { x: 12, y: 5,  hp: 100, destroyed: false },
+                    { x: 20, y: 5,  hp: 100, destroyed: false }
+                ]
+            },
+            p2: {
+                id: p2Id,
+                units: [
+                    { x: 5,  y: 20, hp: 100, destroyed: false },
+                    { x: 12, y: 20, hp: 100, destroyed: false },
+                    { x: 20, y: 20, hp: 100, destroyed: false }
+                ]
+            }
+        },
+        timer: 30
+    };
+}
 
-    room.interval = setInterval(() => {
-        room.timer--;
-        io.to(roomId).emit('timerUpdate', room.timer);
-
-        if (room.timer <= 0) {
-            switchTurn(roomId);
+// Управление комнатами и таймерами
+let timerIntervals = {};
+function startTurnTimer(room) {
+    if (timerIntervals[room]) clearInterval(timerIntervals[room]);
+    
+    timerIntervals[room] = setInterval(() => {
+        const state = activeGames[room];
+        if (!state) {
+            clearInterval(timerIntervals[room]);
+            return;
+        }
+        
+        state.timer--;
+        io.to(room).emit('timerUpdate', state.timer);
+        
+        if (state.timer <= 0) {
+            // Смена хода по таймауту
+            state.turn = (state.turn === state.players.p1.id) ? state.players.p2.id : state.players.p1.id;
+            state.timer = 30;
+            io.to(room).emit('turnChanged', { turn: state.turn, timer: state.timer, state: state });
         }
     }, 1000);
 }
 
-function switchTurn(roomId) {
-    const room = rooms[roomId];
-    if (!room) return;
+io.on('connection', (socket) => {
+    console.log(`Пользователь подключился: ${socket.id}`);
 
-    room.turn = room.turn === room.players.p1.id ? room.players.p2.id : room.players.p1.id;
-    
-    const p1Socket = io.sockets.sockets.get(room.players.p1.id);
-    const p2Socket = io.sockets.sockets.get(room.players.p2.id);
-
-    if (p1Socket) p1Socket.emit('turnChanged', { turn: room.turn, timer: 9, state: getMaskedState(room, 'p1') });
-    if (p2Socket) p2Socket.emit('turnChanged', { turn: room.turn, timer: 9, state: getMaskedState(room, 'p2') });
-
-    startGameTimer(roomId);
-}
-
-function checkWinCondition(roomId) {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    const p1AllDestroyed = room.players.p1.units.every(u => u.destroyed);
-    const p2AllDestroyed = room.players.p2.units.every(u => u.destroyed);
-
-    if (p1AllDestroyed || p2AllDestroyed) {
-        clearInterval(room.interval);
-        let winner = null;
-        if (p1AllDestroyed && !p2AllDestroyed) winner = room.players.p2.id;
-        if (p2AllDestroyed && !p1AllDestroyed) winner = room.players.p1.id;
-
-        io.to(roomId).emit('gameOver', { winner: winner });
-        delete rooms[roomId];
-    } else {
-        const p1Socket = io.sockets.sockets.get(room.players.p1.id);
-        const p2Socket = io.sockets.sockets.get(room.players.p2.id);
-        if (p1Socket) p1Socket.emit('gameStateUpdate', getMaskedState(room, 'p1'));
-        if (p2Socket) p2Socket.emit('gameStateUpdate', getMaskedState(room, 'p2'));
-    }
-}
-
-function getMaskedState(room, viewerRole) {
-    const opponentRole = viewerRole === 'p1' ? 'p2' : 'p1';
-    
-    const maskedOpponentUnits = room.players[opponentRole].units.map(unit => {
-        if (unit.destroyed) {
-            return { x: unit.x, y: unit.y, hp: 0, destroyed: true };
+    socket.on('joinGame', () => {
+        if (!waitingPlayer) {
+            waitingPlayer = socket;
+            socket.emit('waiting');
         } else {
-            return { x: -1000, y: -1000, hp: unit.hp, destroyed: false }; 
+            const p1 = waitingPlayer;
+            const p2 = socket;
+            const room = `room_${p1.id}_${p2.id}`;
+
+            p1.join(room);
+            p2.join(room);
+
+            p1.gameState = { room, role: 'p1' };
+            p2.gameState = { room, role: 'p2' };
+
+            const initialState = createInitialState(p1.id, p2.id);
+            activeGames[room] = initialState;
+
+            p1.emit('gameStart', { role: 'p1', state: initialState });
+            p2.emit('gameStart', { role: 'p2', state: initialState });
+
+            waitingPlayer = null;
+            startTurnTimer(room);
         }
     });
 
-    return {
-        turn: room.turn,
-        players: {
-            [viewerRole]: { units: room.players[viewerRole].units },
-            [opponentRole]: { units: maskedOpponentUnits }
+    socket.on('playerAction', (action) => {
+        if (!socket.gameState) return;
+        const { room, role } = socket.gameState;
+        const state = activeGames[room];
+
+        if (!state || state.turn !== socket.id) return;
+
+        const opponentRole = (role === 'p1') ? 'p2' : 'p1';
+
+        if (action.type === 'fire') {
+            io.to(room).emit('fireResult', {
+                x: action.x,
+                y: action.y,
+                targetRole: opponentRole,
+                result: 'splash'
+            });
+
+            // Расчет урона юнитам противника
+            state.players[opponentRole].units.forEach(unit => {
+                if (unit.destroyed) return;
+                const dist = Math.sqrt(Math.pow(unit.x - action.x, 2) + Math.pow(unit.y - action.y, 2));
+                if (dist <= 0.97) {
+                    unit.hp -= 50;
+                } else if (dist <= 4.13) {
+                    unit.hp -= 25;
+                }
+                if (unit.hp <= 0) {
+                    unit.hp = 0;
+                    unit.destroyed = true;
+                }
+            });
+        } 
+        else if (action.type === 'move') {
+            const unit = state.players[role].units[action.unitIndex];
+            if (unit && !unit.destroyed) {
+                unit.x = Math.max(0, Math.min(FIELD_SIZE, action.x));
+                unit.y = Math.max(0, Math.min(FIELD_SIZE, action.y));
+            }
         }
-    };
-}
+
+        // Проверка на окончание игры
+        const opponentAlive = state.players[opponentRole].units.some(u => !u.destroyed);
+        if (!opponentAlive) {
+            clearInterval(timerIntervals[room]);
+            io.to(room).emit('gameOver', { winner: socket.id });
+            delete activeGames[room];
+            return;
+        }
+
+        // Передача хода
+        state.turn = state.players[opponentRole].id;
+        state.timer = 30;
+        io.to(room).emit('turnChanged', { turn: state.turn, timer: state.timer, state: state });
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`Пользователь отключился: ${socket.id}`);
+        if (waitingPlayer && waitingPlayer.id === socket.id) {
+            waitingPlayer = null;
+        }
+        if (socket.gameState) {
+            const { room } = socket.gameState;
+            clearInterval(timerIntervals[room]);
+            io.to(room).emit('gameOver', { winner: 'system', reason: 'Opponent disconnected' });
+            delete activeGames[room];
+        }
+    });
+});
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
