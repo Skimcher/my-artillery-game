@@ -1,6 +1,8 @@
+// --- ИНИЦИАЛИЗАЦИЯ СОКЕТОВ С ИСПРАВЛЕНИЕМ ДЛЯ ITCH.IO ---
 const socket = io('https://artillery-game2.onrender.com', {
-    transports: ['websocket'],
-    upgrade: false,
+    transports: ['websocket', 'polling'], // Добавлен polling для обхода блокировок фрейма
+    withCredentials: true,
+    upgrade: true,
     forceNew: true
 });
 
@@ -384,7 +386,7 @@ socket.on('gameStart', (data) => {
     myId = socket.id; 
     gameState = data.state; 
     
-    // ПОЛЯ ТЕПЕРЬ ВСЕГДА ОСТАЮТСЯ ВИДИМЫ ДЛЯ ОБЕИХ СТОРОН, ЧТОБЫ БЫЛО КУДА СТРЕЛЯТЬ
+    // Обе платформы всегда остаются видимыми
     if (visualField1) visualField1.visible = true;
     if (outline1) outline1.visible = true;
     if (visualField2) visualField2.visible = true;
@@ -462,7 +464,6 @@ function updateTurnUI() {
 function renderUnits() {
     const activeIdBeforeRender = selectedUnitId;
     
-    // Clear old elements from scene & safely hide HP divs
     Object.keys(visualUnits).forEach(id => {
         const el = document.getElementById(`hp-container-${id}`);
         if (el) el.style.display = 'none';
@@ -476,15 +477,10 @@ function renderUnits() {
     const p1 = gameState.players.p1; 
     const p2 = gameState.players.p2;
 
-    // --- RENDERING PLAYER 1 (P1) BLOCKS ---
     if (p1 && p1.units) {
         p1.units.forEach((unit, index) => {
             if (unit.x === -1000 || unit.y === -1000) return;
-
-            // FOG OF WAR: Если я Игрок 2, и вражеский юнит ЖИВ — полный игнор отрисовки
-            if (myRole === 'p2' && !unit.destroyed) {
-                return; 
-            }
+            if (myRole === 'p2' && !unit.destroyed) return; // Туман войны для P2
 
             createVisualUnit(`p1_${index}`, unit.x, unit.y, 0x1e90ff, unit.destroyed, 'p1', unit.hp);
             if (unit.destroyed) {
@@ -496,7 +492,46 @@ function renderUnits() {
         });
     }
 
-    // --- RENDERING PLAYER 2 (P2) BLOCKS ---
     if (p2 && p2.units) {
         p2.units.forEach((unit, index) => {
-            if (unit.x === -1000 || unit.y === -1
+            if (unit.x === -1000 || unit.y === -1000) return;
+            if (myRole === 'p1' && !unit.destroyed) return; // Туман войны для P1
+
+            createVisualUnit(`p2_${index}`, unit.x, unit.y, 0xff4757, unit.destroyed, 'p2', unit.hp);
+            if (unit.destroyed) {
+                burningUnitsPositions.push({ 
+                    x: unit.x - (FIELD_SIZE / 2), 
+                    z: unit.y - (FIELD_SIZE / 2) - FIELD_OFFSET_Z 
+                });
+            }
+        });
+    }
+
+    if (activeIdBeforeRender && visualUnits[activeIdBeforeRender]) {
+        selectedUnitId = activeIdBeforeRender;
+        updateSelectionRing(visualUnits[selectedUnitId]);
+    }
+}
+
+// --- CORE ANIMATION LOOP ---
+function animate() {
+    requestAnimationFrame(animate);
+    spawnFireAndSmoke();
+    updateHpBarsPositions();
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.mesh.position.x += p.vX; p.mesh.position.y += p.vY; p.mesh.position.z += p.vZ;
+        p.vY -= 0.005; p.life--;
+        if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
+    }
+    renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+    updateCameraPosition();
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    updateControlsVisibility(); 
+});
+setTimeout(updateControlsVisibility, 100);
