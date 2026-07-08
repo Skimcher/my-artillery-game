@@ -60,7 +60,7 @@ textureLoader.load('/assets/background.jpg', (bgTexture) => {
 const BASE_FOV = 41;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// ИСПРАВЛЕНО: Адаптивный подъем нижней части игрового поля на ПК-версиях
+// ИСПРАВЛЕНО ДЛЯ ПК: Поднимаем поле, оголяя бэкграунд снизу, и уводим его из-под кнопок во всех браузерах
 function updateCameraPosition() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -73,11 +73,14 @@ function updateCameraPosition() {
         camera.position.set(0, 42, 38); 
         camera.lookAt(0, -2, -5); 
     } else {
-        // --- ПК ВЕРСИЯ (Отодвигаем камеру назад и поднимаем точку обзора, чтобы снизу был виден фон) ---
+        // --- ПК ВЕРСИЯ (Подходит для Chrome, Opera, Mozilla, Edge и др.) ---
         camera.fov = BASE_FOV;
         camera.updateProjectionMatrix();
-        camera.position.set(0, 46, 43); 
-        camera.lookAt(0, -1, -2); 
+        // Сместили камеру чуть выше (47.5) и назад (44.5)
+        camera.position.set(0, 47.5, 44.5); 
+        // Фокусируем взгляд чуть ниже геометрического центра (-3.8), благодаря чему верхнее поле уходит из-под кнопок, 
+        // а под нижним полем образуется идеальная свободная полоса бэкграунда
+        camera.lookAt(0, -2, -3.8); 
     }
 }
 updateCameraPosition();
