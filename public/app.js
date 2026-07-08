@@ -18,7 +18,10 @@ socket.on('connect', () => {
 });
 
 socket.on('gameStart', (data) => {
-    document.getElementById('loader').style.display = 'none';
+    // ЭТА СТРОКА СКРЫВАЕТ НАДПИСЬ
+    const loaderElem = document.getElementById('loader');
+    if (loaderElem) loaderElem.style.display = 'none';
+    
     console.log("Игра началась", data);
 });
 
