@@ -13,7 +13,7 @@ let sauModelTemplate = null;
 const FIELD_SIZE = 25;
 const FIELD_OFFSET_Z = 13.5; 
 const DIRECT_RADIUS = 1.25;  
-const SPLASH_RADIUS = 4.0;   
+const SPLASH_RADIUS = 4.0;   // Радиус осколков строго 4 метра
 
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
@@ -257,7 +257,7 @@ socket.on('timerUpdate', (t) => { timerEl.innerText = `TIME: ${t}`; });
 socket.on('turnChanged', (data) => { 
     gameState = data.state; 
     hasDoneActionThisTurn = false; 
-    timerEl.innerText = `TIME: ${data.timer}`; // Принудительно ставим стартовые 9 секунд
+    timerEl.innerText = `TIME: ${data.timer}`; 
     updateTurnUI(); 
     renderUnits(); 
 });
@@ -269,18 +269,21 @@ socket.on('fireResult', (data) => {
     const wX = data.x - (FIELD_SIZE / 2);
     const wZ = data.y - (FIELD_SIZE / 2) + offsetZ;
 
+    // Круг осколков (4м): Приподнят на Y=0.3, чтобы лежать НАД текстурой земли
     const splashGeo = new THREE.RingGeometry(0, SPLASH_RADIUS, 32).rotateX(-Math.PI / 2);
     const splashMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
     const splashMesh = new THREE.Mesh(splashGeo, splashMat);
-    splashMesh.position.set(wX, 0.02, wZ);
+    splashMesh.position.set(wX, 0.3, wZ); 
     scene.add(splashMesh);
 
+    // Круг прямого попадания (1.25м): Приподнят на Y=0.31, чтобы не пересекаться со сплэшем
     const directGeo = new THREE.RingGeometry(0, DIRECT_RADIUS, 32).rotateX(-Math.PI / 2);
     const directMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     const directMesh = new THREE.Mesh(directGeo, directMat);
-    directMesh.position.set(wX, 0.03, wZ);
+    directMesh.position.set(wX, 0.31, wZ); 
     scene.add(directMesh);
 
+    // Удаление кругов ровно через 2 секунды (2000 миллисекунд)
     setTimeout(() => {
         scene.remove(splashMesh);
         scene.remove(directMesh);
