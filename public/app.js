@@ -1,28 +1,28 @@
 const socket = io();
 
 // --- GAME STATE ---
-let myRole = null;          
-let myId = null;            
-let gameState = null;       
-let currentMode = 'fire';   
-let hasDoneActionThisTurn = false; 
-let selectedUnitId = null;  
-let selectionRing = null;   
+let myRole = null;
+let myId = null;
+let gameState = null;
+let currentMode = 'fire';
+let hasDoneActionThisTurn = false;
+let selectedUnitId = null;
+let selectionRing = null;
 
-const visualUnits = {};     
-const particles = []; 
-const burningUnitsPositions = []; 
+const visualUnits = {};
+const particles = [];
+const burningUnitsPositions = [];
 
 const gltfLoader = new THREE.GLTFLoader();
-let sauModelTemplate = null; 
-let sauCenterOffset = new THREE.Vector3(); 
+let sauModelTemplate = null;
+let sauCenterOffset = new THREE.Vector3();
 
-const FIELD_SIZE = 25;       
-const DIRECT_RADIUS = 0.97;  
-const SPLASH_RADIUS = 4.13;  
-const FIELD_OFFSET_Z = 13.5; 
+const FIELD_SIZE = 25;
+const DIRECT_RADIUS = 0.97;
+const SPLASH_RADIUS = 4.13;
+const FIELD_OFFSET_Z = 13.5;
 
-// --- СТИЛИ ---
+// --- СТИЛИ И ИНИЦИАЛИЗАЦИЯ ---
 const style = document.createElement('style');
 style.innerHTML = `
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; position: fixed; background-color: #000; }
@@ -30,11 +30,12 @@ style.innerHTML = `
 `;
 document.head.appendChild(style);
 
-// --- THREE.JS ИНИЦИАЛИЗАЦИЯ ---
 const container = document.getElementById('canvas-container') || document.body;
 const scene = new THREE.Scene();
 const textureLoader = new THREE.TextureLoader();
-textureLoader.load('/assets/background.jpg', (bgTexture) => { scene.background = bgTexture; });
+
+// Фоновая текстура
+textureLoader.load('assets/background.jpg', (bgTexture) => { scene.background = bgTexture; });
 
 const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 51.0, 44.5);
@@ -42,7 +43,6 @@ camera.lookAt(0, -2, 3.2);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 container.appendChild(renderer.domElement);
 
@@ -51,8 +51,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
 dirLight.position.set(30, 60, 20);
 scene.add(dirLight);
 
-// --- ИНИЦИАЛИЗАЦИЯ ОБЪЕКТОВ СЦЕНЫ ---
-// Эти функции создают поля. Они должны вызываться один раз при старте.
+// --- ИНИЦИАЛИЗАЦИЯ ПОЛЕЙ ---
 function createFieldOutline() {
     const geometry = new THREE.BufferGeometry();
     const half = FIELD_SIZE / 2;
@@ -68,72 +67,57 @@ function createFieldOutline() {
 
 function createBattlefields() {
     const fieldGeometry = new THREE.BoxGeometry(FIELD_SIZE, 0.1, FIELD_SIZE);
-    const fieldMaterial = new THREE.MeshStandardMaterial({ color: 0x448844, roughness: 0.8 }); // Временно простой цвет, если текстура не грузится
-    const visualField1 = new THREE.Mesh(fieldGeometry, fieldMaterial);
-    const visualField2 = new THREE.Mesh(fieldGeometry, fieldMaterial);
-    visualField1.position.set(0, 0, FIELD_OFFSET_Z);
-    visualField2.position.set(0, 0, -FIELD_OFFSET_Z);
-    scene.add(visualField1, visualField2);
+    textureLoader.load('assets/battlefield.jpg', (tex) => {
+        const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
+        const field1 = new THREE.Mesh(fieldGeometry, mat);
+        const field2 = new THREE.Mesh(fieldGeometry, mat);
+        field1.position.set(0, 0, FIELD_OFFSET_Z);
+        field2.position.set(0, 0, -FIELD_OFFSET_Z);
+        scene.add(field1, field2);
+    });
 }
 
 createFieldOutline();
 createBattlefields();
 
-// --- ИНТЕРФЕЙС ---
-const uiContainer = document.createElement('div');
-uiContainer.id = 'ui-container';
-uiContainer.style.cssText = 'position:absolute; top:15px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; width:100vw; pointer-events:none; z-index:9999;';
-document.body.appendChild(uiContainer);
-
-const turnIndicator = document.createElement('div');
-turnIndicator.id = 'turn-indicator';
-turnIndicator.style.cssText = 'font-family:sans-serif; font-weight:bold; color:#fff; text-shadow:2px 2px 4px #000;';
-uiContainer.appendChild(turnIndicator);
-
-const controls = document.createElement('div');
-controls.id = 'controls';
-controls.style.cssText = 'display:none; gap:15px; pointer-events:auto; margin-top:10px;';
-uiContainer.appendChild(controls);
-
-const btnFire = document.createElement('button');
-btnFire.innerText = 'FIRE';
-btnFire.style.cssText = 'padding:12px 24px; font-weight:bold; cursor:pointer; background:#2ed573; border:2px solid #fff; border-radius:6px;';
-controls.appendChild(btnFire);
-
-const btnMove = document.createElement('button');
-btnMove.innerText = 'MOVE';
-btnMove.style.cssText = 'padding:12px 24px; font-weight:bold; cursor:pointer; background:#333; border:2px solid #555; border-radius:6px;';
-controls.appendChild(btnMove);
+// --- ЗАГРУЗКА САУ ---
+gltfLoader.load('models/sau.glb', (gltf) => {
+    sauModelTemplate = gltf.scene;
+    // Настройка масштаба модели
+    const box = new THREE.Box3().setFromObject(sauModelTemplate);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const scale = 3.45 / Math.max(size.x, size.y, size.z);
+    sauModelTemplate.scale.set(scale, scale, scale);
+    if (gameState) renderUnits(); // Отрисовываем, если данные уже пришли
+});
 
 // --- ЛОГИКА СОКЕТОВ ---
-socket.emit('joinGame');
-
-socket.on('gameStart', (data) => { 
-    myRole = data.role; myId = socket.id; gameState = data.state;
-    controls.style.display = 'flex';
-    renderUnits(); 
-    updateTurnUI(); 
+socket.on('gameStart', (data) => {
+    myRole = data.role;
+    myId = socket.id;
+    gameState = data.state;
+    renderUnits();
 });
 
-socket.on('gameStateUpdate', (newState) => { 
-    gameState = newState; 
-    renderUnits(); 
+socket.on('gameStateUpdate', (newState) => {
+    gameState = newState;
+    renderUnits();
 });
-
-function updateTurnUI() {
-    turnIndicator.innerText = (gameState && gameState.turn === myId) ? "YOUR TURN!" : "OPPONENT'S TURN...";
-    controls.style.display = (gameState && gameState.turn === myId && !hasDoneActionThisTurn) ? 'flex' : 'none';
-}
 
 function renderUnits() {
-    // Очистка старых юнитов
-    Object.keys(visualUnits).forEach(id => scene.remove(visualUnits[id]));
-    if (!gameState || !gameState.players) return;
+    // Очистка
+    Object.keys(visualUnits).forEach(id => {
+        scene.remove(visualUnits[id]);
+        delete visualUnits[id];
+    });
 
-    // Логика отрисовки (как в вашем рабочем варианте)
-    // Добавьте сюда вызовы вашей функции createVisualUnit для P1 и P2
+    if (!gameState || !gameState.players || !sauModelTemplate) return;
+
+    // Отрисовка p1 и p2 (добавьте здесь цикл по units из вашего рабочего кода)
+    console.log("Отрисовка юнитов...");
 }
 
+// --- ЦИКЛ ---
 function animate() {
     requestAnimationFrame(animate);
     renderer.render(scene, camera);
