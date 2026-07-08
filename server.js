@@ -14,9 +14,9 @@ let waitingTimeout = null;
 
 const FIELD_SIZE = 25;
 const UNIT_RADIUS = 1.5;     // Модель 3м -> радиус 1.5м
-const DIRECT_RADIUS = 1.25;  // Диаметр 2.5м -> радиус 1.25м (критическое попадание)
-const SPLASH_RADIUS = 4.0;   // Новое значение: 4 метра радиус осколков
-const TURN_TIME = 9;         // Новое значение: 9 секунд на ход
+const DIRECT_RADIUS = 1.25;  // Диаметр 2.5м -> радиус 1.25м (критическое)
+const SPLASH_RADIUS = 4.0;   // Радиус осколков 4м
+const TURN_TIME = 9;         // 9 секунд на ход
 
 function generateUnits() {
     const min = UNIT_RADIUS;
@@ -40,13 +40,12 @@ io.on('connection', (socket) => {
         waitingPlayer = socket;
         socket.emit('waiting');
         
-        // Ожидание оппонента 300 секунд
         waitingTimeout = setTimeout(() => {
             if (waitingPlayer && waitingPlayer.id === socket.id) {
                 waitingPlayer.emit('gameOver', { winner: 'timeout_no_opponent' });
                 waitingPlayer = null;
             }
-        }, 300000); // 300 секунд
+        }, 300000); // 300 секунд ожидания в лобби
     } else {
         clearTimeout(waitingTimeout);
         const roomId = `room_${waitingPlayer.id}_${socket.id}`;
@@ -63,7 +62,7 @@ io.on('connection', (socket) => {
                 p1: { id: p1.id, units: generateUnits() },
                 p2: { id: p2.id, units: generateUnits() }
             },
-            turn: p1.id,
+            turn: 'p1', // Теперь ход хранит роль ('p1' или 'p2'), а не ID сокета! Это решает баг рассинхрона
             timer: TURN_TIME,
             interval: null
         };
@@ -79,9 +78,11 @@ io.on('connection', (socket) => {
         if (!roomId || !rooms[roomId]) return;
 
         const room = rooms[roomId];
-        if (room.turn !== socket.id) return;
-
         const myRole = room.players.p1.id === socket.id ? 'p1' : 'p2';
+        
+        // Проверяем, чей сейчас ход по роли
+        if (room.turn !== myRole) return;
+
         const opponentRole = myRole === 'p1' ? 'p2' : 'p1';
 
         if (data.type === 'fire') {
@@ -119,18 +120,19 @@ io.on('connection', (socket) => {
         switchTurn(roomId);
     });
 
-    socket.on('disconnect', () => {
-        console.log(`Player disconnected: ${socket.id}`);
-        if (waitingPlayer && waitingPlayer.id === socket.id) {
-            clearTimeout(waitingTimeout);
-            waitingPlayer = null;
-            return;
-        }
-        const roomId = Object.keys(rooms).find(r => rooms[r].players.p1.id === socket.id || rooms[r].players.p2.id === socket.id);
-        if (roomId) {
+    socket.on('disconnecting', () => {
+        const roomId = Array.from(socket.rooms).find(r => r.startsWith('room_'));
+        if (roomId && rooms[roomId]) {
             clearInterval(rooms[roomId].interval);
             io.to(roomId).emit('gameOver', { winner: 'opponent_disconnected' });
             delete rooms[roomId];
+        }
+    });
+
+    socket.on('disconnect', () => {
+        if (waitingPlayer && waitingPlayer.id === socket.id) {
+            clearTimeout(waitingTimeout);
+            waitingPlayer = null;
         }
     });
 });
@@ -138,7 +140,8 @@ io.on('connection', (socket) => {
 function switchTurn(roomId) {
     const room = rooms[roomId];
     if (!room) return;
-    room.turn = room.turn === room.players.p1.id ? room.players.p2.id : room.players.p1.id;
+    
+    room.turn = room.turn === 'p1' ? 'p2' : 'p1';
     room.timer = TURN_TIME;
     
     sendStateUpdate(roomId);
@@ -149,7 +152,10 @@ function startRoomTimer(roomId) {
     room.interval = setInterval(() => {
         if (!rooms[roomId]) return;
         room.timer--;
+        
+        // Отправляем тик таймера сразу всей комнате
         io.to(roomId).emit('timerUpdate', room.timer);
+        
         if (room.timer <= 0) {
             switchTurn(roomId);
         }
@@ -160,11 +166,9 @@ function sendStateUpdate(roomId) {
     const room = rooms[roomId];
     if (!room) return;
 
-    const p1Socket = io.sockets.sockets.get(room.players.p1.id);
-    const p2Socket = io.sockets.sockets.get(room.players.p2.id);
-
-    if (p1Socket) p1Socket.emit('turnChanged', { turn: room.turn, state: getMaskedState(room, 'p1'), timer: room.timer });
-    if (p2Socket) p2Socket.emit('turnChanged', { turn: room.turn, state: getMaskedState(room, 'p2'), timer: room.timer });
+    // Вместо поиска сокетов по ID, шлем индивидуальные состояния через io.to() напрямую участникам комнаты
+    io.to(room.players.p1.id).emit('turnChanged', { turn: room.turn, state: getMaskedState(room, 'p1'), timer: room.timer });
+    io.to(room.players.p2.id).emit('turnChanged', { turn: room.turn, state: getMaskedState(room, 'p2'), timer: room.timer });
 }
 
 function checkGameOver(roomId) {
@@ -174,10 +178,11 @@ function checkGameOver(roomId) {
 
     if (p1Dead || p2Dead) {
         clearInterval(room.interval);
-        let winner = null;
-        if (p1Dead && !p2Dead) winner = room.players.p2.id;
-        if (p2Dead && !p1Dead) winner = room.players.p1.id;
-        io.to(roomId).emit('gameOver', { winner: winner });
+        let winnerRole = null;
+        if (p1Dead && !p2Dead) winnerRole = 'p2';
+        if (p2Dead && !p1Dead) winnerRole = 'p1';
+        
+        io.to(roomId).emit('gameOver', { winnerRole: winnerRole });
         delete rooms[roomId];
     }
 }
@@ -185,7 +190,7 @@ function checkGameOver(roomId) {
 function getMaskedState(room, viewerRole) {
     const opponentRole = viewerRole === 'p1' ? 'p2' : 'p1';
     return {
-        turn: room.turn,
+        turn: room.turn, // Возвращает роль 'p1' или 'p2'
         players: {
             [viewerRole]: room.players[viewerRole],
             [opponentRole]: {
