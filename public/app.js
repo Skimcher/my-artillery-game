@@ -1,18 +1,18 @@
-// --- ИНИЦИАЛИЗАЦИЯ ---
+// --- ИНИЦИАЛИЗАЦИЯ И ПОДКЛЮЧЕНИЕ ---
 const socket = io('https://artillery-game2.onrender.com', { transports: ['websocket'] });
 
-// --- СТИЛИ (ВСТРОЕННЫЕ) ---
+// --- СТИЛИ (CSS) ---
 const style = document.createElement('style');
 style.innerHTML = `
-    #controls { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 15px; }
-    #controls button { padding: 12px 25px; cursor: pointer; }
-    .hp-bar-container { position: absolute; width: 60px; height: 8px; background: rgba(0,0,0,0.6); border: 1px solid #fff; z-index: 900; pointer-events: none; }
+    #controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 10px; }
+    #controls button { padding: 10px 20px; cursor: pointer; }
+    .hp-bar-container { position: absolute; width: 60px; height: 8px; background: rgba(0,0,0,0.6); border: 1px solid #fff; pointer-events: none; }
     .hp-bar-fill { height: 100%; background: #2ed573; transition: width 0.2s; }
 `;
 document.head.appendChild(style);
 
-// --- СОЗДАНИЕ HP ---
-function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, hp) {
+// --- ФУНКЦИИ ОТРИСОВКИ ---
+function createVisualUnit(id, hp) {
     const hpContainer = document.createElement('div');
     hpContainer.id = `hp-${id}`;
     hpContainer.className = 'hp-bar-container';
@@ -20,9 +20,9 @@ function createVisualUnit(id, serverX, serverY, ringColor, isDestroyed, owner, h
     document.body.appendChild(hpContainer);
 }
 
-// --- ОСНОВНОЙ ЦИКЛ (МИНИМУМ) ---
+// --- THREE.JS СЦЕНА ---
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(41, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -33,4 +33,10 @@ function animate() {
 }
 animate();
 
-console.log("Игра загружена успешно!");
+// --- ПРОВЕРКА СОКЕТА ---
+socket.on('connect', () => {
+    console.log("Соединение установлено!");
+    socket.emit('joinGame');
+});
+
+console.log("Файл app.js успешно загружен до конца.");
