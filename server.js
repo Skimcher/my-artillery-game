@@ -21,7 +21,12 @@ const FIELD_SIZE = 25;
 let waitingPlayer = null;
 const activeGames = {}; // room -> game state
 
-// Функция генерации случайной позиции внутри квадратного поля (с отступом от краев)
+// ТАЙМИНГИ ИЗМЕНЕНЫ ПО ВАШЕМУ ТРЕБОВАНИЮ:
+const TURN_TIME_LIMIT = 9;      // Время на ход: 9 секунд
+const MATCHMAKING_TIMEOUT = 300; // Время ожидания соперника: 300 секунд
+
+let matchmakingTimers = {};
+
 function getRandomPosition() {
     const min = 2;
     const max = FIELD_SIZE - 2;
@@ -34,7 +39,6 @@ function createInitialState(p1Id, p2Id) {
         players: {
             p1: {
                 id: p1Id,
-                // Строго 2 САУ в случайных местах
                 units: [
                     { x: getRandomPosition(), y: getRandomPosition(), hp: 100, destroyed: false },
                     { x: getRandomPosition(), y: getRandomPosition(), hp: 100, destroyed: false }
@@ -42,14 +46,13 @@ function createInitialState(p1Id, p2Id) {
             },
             p2: {
                 id: p2Id,
-                // Строго 2 САУ в случайных местах
                 units: [
                     { x: getRandomPosition(), y: getRandomPosition(), hp: 100, destroyed: false },
                     { x: getRandomPosition(), y: getRandomPosition(), hp: 100, destroyed: false }
                 ]
             }
         },
-        timer: 30
+        timer: TURN_TIME_LIMIT
     };
 }
 
@@ -69,7 +72,7 @@ function startTurnTimer(room) {
         
         if (state.timer <= 0) {
             state.turn = (state.turn === state.players.p1.id) ? state.players.p2.id : state.players.p1.id;
-            state.timer = 30;
+            state.timer = TURN_TIME_LIMIT;
             io.to(room).emit('turnChanged', { turn: state.turn, timer: state.timer, state: state });
         }
     }, 1000);
@@ -82,7 +85,23 @@ io.on('connection', (socket) => {
         if (!waitingPlayer) {
             waitingPlayer = socket;
             socket.emit('waiting');
+
+            // Запускаем таймер ожидания на 300 секунд для первого игрока
+            matchmakingTimers[socket.id] = setTimeout(() => {
+                if (waitingPlayer && waitingPlayer.id === socket.id) {
+                    waitingPlayer.emit('gameOver', { winner: 'timeout' });
+                    waitingPlayer = null;
+                }
+                delete matchmakingTimers[socket.id];
+            }, MATCHMAKING_TIMEOUT * 1000);
+
         } else {
+            // Очищаем таймер ожидания, так как соперник нашелся
+            if (matchmakingTimers[waitingPlayer.id]) {
+                clearTimeout(matchmakingTimers[waitingPlayer.id]);
+                delete matchmakingTimers[waitingPlayer.id];
+            }
+
             const p1 = waitingPlayer;
             const p2 = socket;
             const room = `room_${p1.id}_${p2.id}`;
@@ -138,7 +157,6 @@ io.on('connection', (socket) => {
         else if (action.type === 'move') {
             const unit = state.players[role].units[action.unitIndex];
             if (unit && !unit.destroyed) {
-                // Ограничиваем перемещение строго в рамках игровой платформы
                 unit.x = Math.max(0.5, Math.min(FIELD_SIZE - 0.5, action.x));
                 unit.y = Math.max(0.5, Math.min(FIELD_SIZE - 0.5, action.y));
             }
@@ -153,11 +171,15 @@ io.on('connection', (socket) => {
         }
 
         state.turn = state.players[opponentRole].id;
-        state.timer = 30;
+        state.timer = TURN_TIME_LIMIT;
         io.to(room).emit('turnChanged', { turn: state.turn, timer: state.timer, state: state });
     });
 
     socket.on('disconnect', () => {
+        if (matchmakingTimers[socket.id]) {
+            clearTimeout(matchmakingTimers[socket.id]);
+            delete matchmakingTimers[socket.id];
+        }
         if (waitingPlayer && waitingPlayer.id === socket.id) {
             waitingPlayer = null;
         }
